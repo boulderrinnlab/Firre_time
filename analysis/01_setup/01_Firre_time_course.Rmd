@@ -24,31 +24,41 @@ load("../01_setup/results/rnaseq_data.RData")
 We would like to check that Firre's expression is actually induced by the addition of
 doxycycline.
 
-```{r}
-# Firre's expression in WT
+```{r Firre induction in WT & KO background at time point 0}
+# Goal is to determine firre abundance in wt & ko induced and control.
+
+# Firre's expression in all 0 tinepoints
 firre_tpm <- tpm %>%
   filter(gene_name == "Firre") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timepoint == 0)
+
+# taking the average and std deviation of all 0 timepoints
 firre_mean <- firre_tpm %>%
+  # grouping by induced and genotype (firre_ko - col label)
   group_by(firre_induced, firre_ko) %>%
   summarize(sd = sd(tpm),
             tpm = mean(tpm))
+
+# Plotting mean Firre in KO, WT and induced at 0 timepoint 
 ggplot(firre_tpm, aes(x = firre_induced, y = tpm)) +
   geom_beeswarm(cex = 6, alpha = 0.8) +
     stat_summary(aes(y = tpm, group = firre_induced), fun=mean, colour="red", geom="point") +
     stat_summary(fun='mean', geom='text', 
                aes(label=signif(..y..,3),x=firre_induced)) +
   facet_grid(~firre_ko)
+
 ggsave("figures/firre_expression_at_zero.pdf", height = 2, width = 2)
 firre_wt_level <- firre_mean$tpm[firre_mean$firre_induced == "control" & firre_mean$firre_ko == "WT"]
 ```
+### Result: Firre is slightly higher in the transgene WT line. (Tg could be leaky?) 
+### Result: Firre is not expressed in KO lines or Tg (thus Tg is not leaky)
 
 
-## ESC KO (rescue)
 
 ### ESC KO long timecourse
+## ESC KO (rescue)
 
 ```{r esc_ko_long_firre_profile, message=FALSE}
 firre_tpm <- tpm %>%
