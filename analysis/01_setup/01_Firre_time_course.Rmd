@@ -26,12 +26,14 @@ doxycycline.
 
 ```{r Firre induction in WT & KO background at time point 0}
 # Goal is to determine firre abundance in wt & ko induced and control.
+#TODO is this the short time course -- or all?
 
 # Firre's expression in all 0 tinepoints
 firre_tpm <- tpm %>%
   filter(gene_name == "Firre") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
+  # here is the filter to time point 0 
   filter(cell_type == "ESC", timepoint == 0)
 
 # taking the average and std deviation of all 0 timepoints
@@ -41,6 +43,9 @@ firre_mean <- firre_tpm %>%
   summarize(sd = sd(tpm),
             tpm = mean(tpm))
 
+# setting Firre wild-type average expression (25.1 in WT control line - not transge (45tpm))
+firre_wt_level <- firre_mean$tpm[firre_mean$firre_induced == "control" & firre_mean$firre_ko == "WT"]
+
 # Plotting mean Firre in KO, WT and induced at 0 timepoint 
 ggplot(firre_tpm, aes(x = firre_induced, y = tpm)) +
   geom_beeswarm(cex = 6, alpha = 0.8) +
@@ -49,8 +54,8 @@ ggplot(firre_tpm, aes(x = firre_induced, y = tpm)) +
                aes(label=signif(..y..,3),x=firre_induced)) +
   facet_grid(~firre_ko)
 
-ggsave("figures/firre_expression_at_zero.pdf", height = 2, width = 2)
-firre_wt_level <- firre_mean$tpm[firre_mean$firre_induced == "control" & firre_mean$firre_ko == "WT"]
+# ggsave("figures/firre_expression_at_zero.pdf", height = 2, width = 2)
+
 ```
 ### Result: Firre is slightly higher in the transgene WT line. (Tg could be leaky?) 
 ### Result: Firre is not expressed in KO lines or Tg (thus Tg is not leaky)
@@ -60,27 +65,29 @@ firre_wt_level <- firre_mean$tpm[firre_mean$firre_induced == "control" & firre_m
 ### ESC KO long timecourse
 ## ESC KO (rescue)
 
-```{r esc_ko_long_firre_profile, message=FALSE}
-firre_tpm <- tpm %>%
+```{r Firre KO + transgene long time course (long), message=FALSE}
+
+firre_ko_long_tpm <- tpm %>%
   filter(gene_name == "Firre") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
+  # This is the filter to only KO thus control line and inducible
   filter(cell_type == "ESC", firre_ko == "KO", timecourse_length == "long")
-firre_means <- firre_tpm %>%
+
+# Summarizing cntrol, induced lines and mean tpm in KO background
+firre_ko_long_means <- firre_ko_long_tpm %>%
   group_by(timepoint, firre_induced) %>%
   summarize(tpm = mean(tpm)) %>%
   mutate(timepoint = as.numeric(as.character(timepoint)))
-ggplot(firre_tpm, 
-       aes(x = as.numeric(as.character(timepoint)), y = tpm, color = firre_induced)) +
-  geom_line(data = firre_means, aes(x = timepoint, y = tpm, color = firre_induced,
-                                    group = firre_induced)) +
-  geom_point() + 
-  theme(legend.position = "none") +
-  xlab("T (min)")
-ggsave("figures/firre_esc_ko_profile_long.pdf", height = 3, width = 3, useDingbats = FALSE)
+
+# setting Firre wild-type average expression (25.1 in WT control line - not transge (45tpm))
+firre_wt_level <- firre_mean$tpm[firre_mean$firre_induced == "control" & firre_mean$firre_ko == "WT"]
+
+# Setting up tpm relative to wt average. new col rel_wt
 firre_means <- firre_means %>%
-  #TODO firre_wt_level missing
   mutate(rel_wt = tpm / firre_wt_level)
+
+# Plotting the K0 long time course for control and induced lines
 ggplot(firre_means, 
        aes(x = timepoint, y = rel_wt, color = firre_induced)) +
   geom_line(data = firre_means, aes(x = timepoint, y = rel_wt, color = firre_induced,
@@ -88,19 +95,35 @@ ggplot(firre_means,
   geom_point() + 
   theme(legend.position = "none") +
   xlab("T (min)")
-ggsave("figures/firre_esc_ko_profile_long_relwt.pdf", height = 2, width = 2, useDingbats = FALSE)
-```
 
-```{r}
+# ggsave("figures/firre_esc_ko_profile_long_relwt.pdf", height = 2, width = 2, useDingbats = FALSE)
+
+```
+### Result: Firre is induced in the KO background to ~17 fold wildtype levels 
+### Result: Control line does not express Firre upon dox treament at anytime point
+
+
+# Examples of genes induced at same time as Firre (Potential firre targets)
+# This is a bit adhoc as we have not differential expression yet.
+# Examples are in both WT and KO backgorunds with transgene induction.
+
+# Rapgef4 expression levels Only for SHORT time course (0-330 min)
+```{r 0-330 min : Rapgef4 in KO and WT + trans gene induction and dox control}
+
+# filter to Rapgef4 tpms in wt and KO tiomecourse 0-330 min.
 firre_tpm <- tpm %>%
   filter(gene_name == "Rapgef4") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timecourse_length == "short")
+
+# summarizing control and induced tpm means
 firre_means <- firre_tpm %>%
   group_by(timepoint, firre_induced) %>%
   summarize(tpm = mean(tpm)) %>%
   mutate(timepoint = as.numeric(as.character(timepoint)))
+
+# plotting each all raw data and replicates for Rapgef4
 ggplot(firre_tpm, 
        aes(x = as.numeric(as.character(timepoint)), y = tpm, color = firre_induced)) +
   geom_line(data = firre_means, aes(x = timepoint, y = tpm, color = firre_induced,
@@ -109,20 +132,28 @@ ggplot(firre_tpm,
   facet_wrap(~firre_ko) +
   theme(legend.position = "none") +
   xlab("T (min)")
-ggsave("figures/rapgef4_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
+
+# ggsave("figures/rapgef4_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
 ```
+### Result: Rapgef4 is not expressed and activates txn in early time points 
 
+# Adgrg1 expression levels Only for SHORT time course (0-330 min)
+```{r 0-330 min : Adrgr1 in KO and WT + trans gene induction and dox control}
 
-```{r}
+# Filtering to Adrgr1
 firre_tpm <- tpm %>%
   filter(gene_name == "Adgrg1") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timecourse_length == "short")
+
+# summarizing control and induced tpm means
 firre_means <- firre_tpm %>%
   group_by(timepoint, firre_induced, firre_ko) %>%
   summarize(tpm = mean(tpm)) %>%
   mutate(timepoint = as.numeric(as.character(timepoint)))
+
+# plotting each all raw data and replicates for Adgrg1
 ggplot(firre_tpm, 
        aes(x = as.numeric(as.character(timepoint)), y = tpm, color = firre_induced)) +
   geom_line(data = firre_means, aes(x = timepoint, y = tpm, color = firre_induced,
@@ -131,19 +162,29 @@ ggplot(firre_tpm,
   facet_grid(~firre_ko) +
   theme(legend.position = "none") +
   xlab("T (min)")
-ggsave("figures/adgrg1_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
-```
 
-```{r}
+# ggsave("figures/adgrg1_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
+```
+### Result: Adgrg1 is not expressed and activates txn in early time points 
+
+
+# Shf expression levels Only for SHORT time course (0-330 min)
+```{r 0-330 min : Shf in KO and WT + trans gene induction and dox control}
+
+# Filtering to Shf
 firre_tpm <- tpm %>%
   filter(gene_name == "Shf") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timecourse_length == "short")
+
+# summarizing control and induced tpm means
 firre_means <- firre_tpm %>%
   group_by(timepoint, firre_induced, firre_ko) %>%
   summarize(tpm = mean(tpm)) %>%
   mutate(timepoint = as.numeric(as.character(timepoint)))
+
+# plotting each all raw data and replicates for Shf
 ggplot(firre_tpm, 
        aes(x = as.numeric(as.character(timepoint)), y = tpm, color = firre_induced)) +
   geom_line(data = firre_means, aes(x = timepoint, y = tpm, color = firre_induced,
@@ -152,19 +193,30 @@ ggplot(firre_tpm,
   facet_grid(~firre_ko) +
   theme(legend.position = "none") +
   xlab("T (min)")
-ggsave("figures/shf_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
-```
 
-```{r}
+# ggsave("figures/shf_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
+```
+### Result: Shf is already expressed and goes up a lot quickly
+### Result: Unlike Adgrg1 and Rapgef 4 this gene is already on and bootst up faster
+
+
+# Gfap expression levels Only for SHORT time course (0-330 min)
+```{r r 0-330 min : Gfap in KO and WT + trans gene induction and dox control}
+
+# Filtering to Gfap
 firre_tpm <- tpm %>%
   filter(gene_name == "Gfap") %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timecourse_length == "short")
+
+# summarizing control and induced tpm means
 firre_means <- firre_tpm %>%
   group_by(timepoint, firre_induced, firre_ko) %>%
   summarize(tpm = mean(tpm)) %>%
   mutate(timepoint = as.numeric(as.character(timepoint)))
+
+# plotting each all raw data and replicates for Gfap
 ggplot(firre_tpm, 
        aes(x = as.numeric(as.character(timepoint)), y = tpm, color = firre_induced)) +
   geom_line(data = firre_means, aes(x = timepoint, y = tpm, color = firre_induced,
@@ -175,8 +227,15 @@ ggplot(firre_tpm,
   xlab("T (min)")
 ggsave("figures/gfap_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
 ```
+### Result: Gfap is also off and turns on Rapidly
+#### Summary: Gfap, Rapgef4, Adgrg1 are all off and turn up to ~2tpm :: Shf is on and boost up fast
 
+
+
+# Bringing in the 
 ```{r}
+#TODO start here
+
 load("../11_short_timecourse_combined/results/short_vszero_sig.RData", verbose = T)
 short_sig_genes <- unique(short_vszero_sig$gene_id)
 short_sig_tpm <- tpm %>%
