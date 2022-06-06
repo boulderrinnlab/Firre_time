@@ -232,20 +232,27 @@ ggsave("figures/gfap_short.pdf", height = 1.5, width = 3, useDingbats = FALSE)
 
 
 
-# Bringing in the 
-```{r}
-#TODO start here
+# Bringing in the genes differentially expressed genes across short time course
+# This is the 30 final genes
+```{r getting to the 30 genes temporally regulated across short time course}
 
-load("../11_short_timecourse_combined/results/short_vszero_sig.RData", verbose = T)
+# Filtering genes to one value (if sig in more than one time point)
+load("/scratch/Shares/rinn/JR/Firre_time/analysis/01_setup/results/short_vszero_sig.RData", verbose = T)
 short_sig_genes <- unique(short_vszero_sig$gene_id)
+
+# Pulling in TPM values from TPM object and adding to short_sig_genes
 short_sig_tpm <- tpm %>%
   filter(gene_id %in% short_sig_genes) %>%
     pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
   left_join(samples) %>%
   filter(cell_type == "ESC", timecourse_length == "short")
+
+# Finding the max value of gene across time course.
 short_sig_tpm_summary <- short_sig_tpm %>%
   group_by(gene_id, gene_name) %>%
   summarize(max_tpm = max(tpm))
+
+# Now we have the max value for all 30 genes.
 ```
 
 ```{r}
