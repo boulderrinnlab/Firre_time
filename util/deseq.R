@@ -2,6 +2,10 @@ library(tidyverse)
 library(DESeq2)
 
 deseq_vs_zero <- function(ct, tc_len, fko, fi) {
+  # cell_type == ct,
+  # timecourse_length == tc_len,
+  # firre_ko == fko,
+  # firre_induced == fi)
   
   load("../01_setup/results/rnaseq_data.RData")
   
@@ -23,6 +27,7 @@ deseq_vs_zero <- function(ct, tc_len, fko, fi) {
   
   # Compile results
   res_names <- resultsNames(dds)
+  # removes intercept result 
   dynamic_res <- res_names[grepl("_vs_0", res_names)]
   
   lfc <- lapply(dynamic_res, function(x) {

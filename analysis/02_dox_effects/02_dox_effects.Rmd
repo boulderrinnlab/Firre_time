@@ -19,19 +19,21 @@ source("../../util/_plot_theme.R")
 source("../../util/_util.R")
 source("../../util/deseq.R")
 source("../../util/figures.R")
-source("../../01_setup/assumptions.R")
+source("../01_setup/assumptions.R")
 
 # Keep track of thresholds for figure naming
 thresh <- paste0("pval", pval_thresh, "_l2fc", round(l2fc_thresh, 2))
 
-(0.045/0.0449)*100
-(0.045/0.0289)*100
-
+# we have set our standard thresholds to :
+# P <0.05 & Lfc .58
 ```
 
-### EC KO long timecourse dox effect
+### First we load in the KO control line (transgene lacking rTTA ) over the longt time course
 
-```{r}
+```{r loading in DeSeq results for esc_ko_control_long time course}
+
+#TODO How is this file derived (looks like Deseq format --- )
+#TODO better understand "esc_ko_control_long.RData 
 if(!file.exists("results/esc_ko_control_long.RData")) {
   source("../../util/deseq.R")
   esc_ko_control_long <- deseq_vs_zero(ct = "ESC", 
@@ -44,15 +46,25 @@ if(!file.exists("results/esc_ko_control_long.RData")) {
 load("results/esc_ko_control_long.RData", verbose = T)
 ```
 
-```{r}
+# Filtering to significant and lfc thresholds
+```{r P < 0.05 and lfc > 0.58}
+
+# Filtering esc_ko_control long
+# mutate to make a col of sig if meets thresholds
 esc_ko_control_long <- esc_ko_control_long %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
+# creating sig gene object for dox effects
+# filtering on new sig col from above
 esc_ko_control_long_sig <- esc_ko_control_long %>% 
   filter(sig == TRUE)
+
 ```
 
-```{r}
+# Plotting sig genes across time using "make_timecourse_lfc_plot
+```{r Plotting sig genes across time using "make_timecourse_lfc_plot}
+
+# Plotting
 make_timecourse_lfc_plot(deseq_res = esc_ko_control_long,
                          genes_to_include = unique(esc_ko_control_long_sig$gene_id),
                          y_lim = c(-5.5,8.2),
@@ -60,10 +72,17 @@ make_timecourse_lfc_plot(deseq_res = esc_ko_control_long,
 ggsave(paste0("figures/esc_ko_control_long_lfc_", thresh, ".pdf"), 
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: Lots of genes are affected by Dox after 12 hours -- not much before
+### TERC one of the most down regulated (~20x) and H19 one most upregulated (2~0x)
 
-### ESC KO short timecourse dox effect
 
-```{r}
+# Dox affected genes in KO background contorl short time course
+# The first time run - Deseq will be invoked to differential analysis
+# Per the "deseq.R" function "deseq_vs_zero"
+```{r KO control short time course dox genes}
+
+
+# running Deseq on sample characteristics selected in "deseq_vs_zero"
 if(!file.exists("results/esc_ko_control_short.RData")) {
   source("../util/deseq.R")
   esc_ko_control_short <- deseq_vs_zero(ct = "ESC", 
@@ -76,7 +95,8 @@ if(!file.exists("results/esc_ko_control_short.RData")) {
 load("results/esc_ko_control_short.RData", verbose = T)
 ```
 
-```{r}
+
+```{r KO control short time course dox genes P < 0.05 and lfc > 0.58 }
 esc_ko_control_short <- esc_ko_control_short %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
@@ -84,17 +104,22 @@ esc_ko_control_short_sig <- esc_ko_control_short %>%
   filter(sig == TRUE)
 ```
 
-```{r}
+# Plotting KO control short time course dox genes
+```{r Figure : KO control short time course }
 make_timecourse_lfc_plot(deseq_res = esc_ko_control_short,
                          genes_to_include = unique(esc_ko_control_short_sig$gene_id),
                          draw_plot = FALSE)
-ggsave(paste0("figures/esc_ko_control_short_lfc_", thresh, ".pdf"), 
-       height = 3, width = 3.5, useDingbats = FALSE)
+
+# ggsave(paste0("figures/esc_ko_control_short_lfc_", thresh, ".pdf"), 
+#        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: many fewer genes are changing -- Neat 1 is going up
 
-### ESC WT long timecourse dox effect
 
-```{r}
+# WT control long time course Deseq run = Dox genes
+```{r WT control long time course Deseq run}
+
+# setting Deseq parameters and running for WT control long time course
 if(!file.exists("results/esc_wt_control_long.RData")) {
   source("../util/deseq.R")
   esc_wt_control_long <- deseq_vs_zero(ct = "ESC", 
@@ -107,7 +132,9 @@ if(!file.exists("results/esc_wt_control_long.RData")) {
 load("results/esc_wt_control_long.RData", verbose = T)
 ```
 
-```{r}
+# Selecting for significant genes in WT control long time course
+```{r WT control dox genes P < 0.05 and lfc > 0.58 }
+
 esc_wt_control_long <- esc_wt_control_long %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
@@ -115,18 +142,26 @@ esc_wt_control_long_sig <- esc_wt_control_long %>%
   filter(sig == TRUE)
 ```
 
-```{r}
+# Plotting WT control sig dox genes long time course
+```{r Plotting WT control sig dox genes long time course}
+
 make_timecourse_lfc_plot(deseq_res = esc_wt_control_long,
                          genes_to_include = unique(esc_wt_control_long_sig$gene_id),
                          y_lim = c(-5,5),
                          draw_plot = FALSE)
-ggsave(paste0("figures/esc_wt_control_long_lfc_", thresh, ".pdf"), 
-       height = 3, width = 3.5, useDingbats = FALSE)
+
+# ggsave(paste0("figures/esc_wt_control_long_lfc_", thresh, ".pdf"), 
+#        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: hundreds of genes changing after 12 hours due to dox
+### Result: similar to KO control long time course
+### Result: Short time course does not have as many sig dox affects in WT or KO backgorund 
 
-### ESC WT Short timecourse dox effect
 
-```{r}
+
+# Running Deseq on wt control short time course 
+```{r WT control short time course Deseq }
+
 if(!file.exists("results/esc_wt_control_short.RData")) {
   source("../util/deseq.R")
   esc_wt_control_short <- deseq_vs_zero(ct = "ESC", 
@@ -139,7 +174,9 @@ if(!file.exists("results/esc_wt_control_short.RData")) {
 load("results/esc_wt_control_short.RData", verbose = T)
 ```
 
-```{r}
+# Filtering to significant genes in WT control short time course
+```{r WT control short time course P < 0.05 and lfc > 0.58}
+
 esc_wt_control_short <- esc_wt_control_short %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
@@ -147,17 +184,24 @@ esc_wt_control_short_sig <- esc_wt_control_short %>%
   filter(sig == TRUE)
 ```
 
-```{r}
+# Plotting wt control short time course sig dox genes 
+```{r Plotting wt control short time course sig dox genes }
+
 make_timecourse_lfc_plot(deseq_res = esc_wt_control_short,
                          genes_to_include = unique(esc_wt_control_short_sig$gene_id),
                          draw_plot = FALSE)
-ggsave(paste0("figures/esc_wt_control_short_lfc_", thresh, ".pdf"), 
-       height = 3, width = 3.5, useDingbats = FALSE)
+
+# ggsave(paste0("figures/esc_wt_control_short_lfc_", thresh, ".pdf"), 
+#        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: again short time course is many fewer genes due to dox effects
 
-### NPC KO Short timecourse dox effect
 
-```{r}
+
+
+# Deseq on NPC KO control Short timecourse dox effect
+```{r Deseq on NPC KO control Short timecourse dox effect}
+
 if(!file.exists("results/npc_ko_control_short.RData")) {
   source("../util/deseq.R")
   npc_ko_control_short <- deseq_vs_zero(ct = "NPC", 
@@ -170,19 +214,21 @@ if(!file.exists("results/npc_ko_control_short.RData")) {
 load("results/npc_ko_control_short.RData", verbose = T)
 ```
 
-```{r}
+# Filtering to signficant genes P < 0.05 and lfc > 0.58
+```{r NPC KO control short time course P < 0.05 and lfc > 0.58}
+
 npc_ko_control_short <- npc_ko_control_short %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
 npc_ko_control_short_sig <- npc_ko_control_short %>% 
   filter(sig == TRUE)
 ```
+### Result: There are no significant genes for NPC KO control.
 
-There are no significant genes for NPC KO control.
+# Deseq on NPC WT Short timecourse dox effect
 
-### NPC WT Short timecourse dox effect
+```{r NPC WT control Deseq }
 
-```{r}
 if(!file.exists("results/npc_wt_control_short.RData")) {
   source("../util/deseq.R")
   npc_wt_control_short <- deseq_vs_zero(ct = "NPC", 
@@ -195,7 +241,9 @@ if(!file.exists("results/npc_wt_control_short.RData")) {
 load("results/npc_wt_control_short.RData", verbose = T)
 ```
 
-```{r}
+# Filtering to significant dox genes in WT control NPCs
+```{r WT control NPCs dox genes P < 0.05 and lfc > 0.58}
+
 npc_wt_control_short <- npc_wt_control_short %>%
   mutate(sig = padj <= pval_thresh & max_abs_l2fc_shrunken > l2fc_thresh)
 
@@ -203,10 +251,16 @@ npc_wt_control_short_sig <- npc_wt_control_short %>%
   filter(sig == TRUE)
 ```
 
-```{r}
+# Plotting WT NPC control short time course dox genes
+```{r lotting WT NPC control short time course dox genes}
+
 make_timecourse_lfc_plot(deseq_res = npc_wt_control_short,
                          genes_to_include = unique(npc_wt_control_short_sig$gene_id),
                          draw_plot = FALSE)
-ggsave(paste0("figures/npc_wt_control_short_lfc_", thresh, ".pdf"), 
-       height = 3, width = 3.5, useDingbats = FALSE)
+
+# ggsave(paste0("figures/npc_wt_control_short_lfc_", thresh, ".pdf"), 
+#        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: only one gene is upregulated due to dox
+
+
