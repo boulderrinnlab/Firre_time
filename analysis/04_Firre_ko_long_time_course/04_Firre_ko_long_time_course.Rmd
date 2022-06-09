@@ -27,7 +27,17 @@ thresh <- paste0("pval", pval_thresh, "_l2fc", round(l2fc_thresh, 2))
 ```
 
 # Loading in all raw counts for all data 
-```{r load, include=FALSE}
+```{r load NF_CORE RNAseq information, include=FALSE}
+
+# This was run on Pipeline nf-core/rnaseq -r 1.4.2 \
+# Key data values we compiled into .RData file 
+
+# Loading in .RData file of rnaseq data that includes
+# Counts, G2S (genes to symbol), genes
+# Salmon gene-counts :: analysis done on gene level (not isoform)
+# Samples with information on Fastq files
+# TPM values from DeSeq and tx2gene
+
 load("../01_setup/results/rnaseq_data.RData")
 ```
 
