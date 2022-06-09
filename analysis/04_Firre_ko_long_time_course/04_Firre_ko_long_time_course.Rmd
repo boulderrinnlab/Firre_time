@@ -16,6 +16,8 @@ library(ggrepel)
 library(ComplexHeatmap)
 library(circlize)
 library(seriation)
+# install.packages("euller")
+library(eulerr)
 source("../../util/_plot_theme.R")
 source("../../util/_util.R")
 source("../01_setup/assumptions.R")
@@ -153,10 +155,9 @@ load("results/ko_rescue_long_vs_zero.RData", verbose = T)
 # Determining genes that are rescued upon inducing Firre in KO background. 
 # We will define the up and down regulated genes in WT -vs- KO 
 # Then identify those genes that are reciprocally regulated upon firre induction.
-
+# Rescue is considered 20% of original expression is recovered upon firre induction
 
 ```{r genes rescued in KO background upon firre induction (that were sig in wt vs ko)}
-
 # We need the KO vs WT data
 load("../03_firre_ko_vs_wt/results/wtko.RData")
 
@@ -215,8 +216,12 @@ rescued_df_closest <-  rescued_df_closest %>%
 rescued_genes_20 <- rescued_df_closest %>% 
   filter(rescued == TRUE) %>% 
   pull(gene_name)
+```
 
-# Plotting rescued genes
+# Plotting recriprocally rescued genes 
+```{r genes rescued in KO background upon firre induction (that were sig in wt vs ko)}
+# Plotting rescued genes amount of rescue
+# red is considered recriprocal to 20% of WT levels
 
 ggplot(rescued_df_closest, aes(x = l2fc_wtko, y = l2fc_ltc, color = rescued)) +
   geom_abline(slope = -1) +
@@ -227,29 +232,12 @@ ggplot(rescued_df_closest, aes(x = l2fc_wtko, y = l2fc_ltc, color = rescued)) +
   geom_abline(slope = -1.2, lty = 2) +
   xlim(-2,2) +
   ylim(-2,2)
-ggsave(paste0("figures/long_rescue_lfc_scatter_", thresh, ".pdf"), 
-       height = 3, width = 3, useDingbats = FALSE)
+
+# ggsave(paste0("figures/long_rescue_lfc_scatter_", thresh, ".pdf"), 
+#        height = 3, width = 3, useDingbats = FALSE)
 
 
-# Let's look at the number of genes overlapping between Firre responders and the KO vs WT
-rescued_gene_ids_20 <- rescued_df_closest %>% 
-  filter(rescued == TRUE) %>% 
-  pull(gene_id)
-
-
-
-combined_genes <- unique(c(rescued_genes, rescued_gene_ids_20))
-
-mat <- cbind(
-  rescued_genes = combined_genes %in% rescued_genes,
-  reciprocal = combined_genes %in% rescued_gene_ids_20
-)
-fit2 <- euler(mat)
-
-
-pdf("figures/rescued_vs_reciprocal_overlap.pdf", height = 2, width = 2)
-plot(fit2, quantities = TRUE, fontsize = 8)
-dev.off()
+# Similar plot:
 
 ggplot(rescued_df_closest, aes(x = l2fc_wtko, y = l2fc_ltc, color = rescued)) +
   geom_abline(slope = -1) +
@@ -272,13 +260,38 @@ ggplot(rescued_df_closest %>% filter(gene_name != "Firre"), aes(x = l2fc_wtko, y
 ggsave(paste0("figures/long_rescue_lfc_scatter_with_linear_regression", thresh, ".pdf"), 
        height = 3, width = 3, useDingbats = FALSE)
 
+# Venn diagram of rescued in time course and those that are recriprocal
+# Let's look at the number of genes overlapping between Firre responders and the KO vs WT
+rescued_gene_ids_20 <- rescued_df_closest %>% 
+  filter(rescued == TRUE) %>% 
+  pull(gene_id)
+
+combined_genes <- unique(c(rescued_genes, rescued_gene_ids_20))
+
+mat <- cbind(
+  rescued_genes = combined_genes %in% rescued_genes,
+  reciprocal = combined_genes %in% rescued_gene_ids_20
+)
+fit2 <- euler(mat)
+
+
+pdf("figures/rescued_vs_reciprocal_overlap.pdf", height = 2, width = 2)
+plot(fit2, quantities = TRUE, fontsize = 8)
+dev.off()
+
 ```
+### Result: 65 of 91 genes are recriprocally rescued !
+
+
+
 
 ### Long timecourse call significant genes
 
 We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff based on the fold change vs zero.
 
 ```{r}
+
+#TODO start here
 ko_rescue_long_dox_sig <- ko_rescue_long_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
