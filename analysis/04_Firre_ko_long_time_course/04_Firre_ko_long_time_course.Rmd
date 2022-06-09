@@ -172,10 +172,21 @@ wtko_sig <- wtko_res_shrnklfc %>%
 # Let's figure out which genes are rescued
 # these are genes that are sig in time course and overlap with wt vs ko
 # makes a list of genes
+
+
+# IMPORTANT: we did not do a lfc threshold.
+# So this means any gene that was sig in long time course that overlaps with wt vs ko
+# 1,770 genes in long time course (with out fold change cut off )
 rescued_genes <- wtko_sig$gene_id[wtko_sig$gene_id %in% 
                                     (ko_rescue_long_shrnklfc %>%
                                        filter(padj <= pval_thresh) %>% 
                                        pull(gene_id))]
+
+
+hmmm <- ko_rescue_long_shrnklfc %>%
+    filter(padj <= pval_thresh) %>% 
+                  pull(gene_id) %>%
+unique()
 
 # filtereing and retreiving more informaton about rescued genes
 # the lfc in wt vs ko and gene name and gene id
@@ -192,6 +203,7 @@ rescue_ltc <- ko_rescue_long_vszero_shrnklfc %>%
   dplyr::rename(l2fc_ltc = log2FoldChange)
 
 # merging wt vs ko sig and ko long time course sig genes
+# There are 640 genes differentially expressed in long time course
 rescued_df <- rescue_wtko %>%
   left_join(rescue_ltc)
 
@@ -199,24 +211,32 @@ rescued_df <- rescue_wtko %>%
 rescued_df <- rescued_df %>%
   mutate(dist = abs((l2fc_wtko * -1) - l2fc_ltc))
 
+
 # genes that are recriprocally regulated
-#TODO understand this
+# first finding overlap between wt vs ko and long time course 
 rescued_df_closest <- rescued_df %>%
   group_by(gene_id, gene_name) %>%
   mutate(closest = min(dist) == dist,
          max_fc = max(abs(l2fc_ltc)) == abs(l2fc_ltc)) %>%
   filter(closest == TRUE)
 
-#TODO ask michael about what is going on here
+# Genes that overlap in long time course wt vs ko and 20% of wild type value is restored
 rescued_df_closest <-  rescued_df_closest %>%
   mutate(twenty_percent = l2fc_wtko * 0.2,
          rescued = (-1*l2fc_wtko - twenty_percent)>= l2fc_ltc & l2fc_ltc>= (-1*l2fc_wtko + twenty_percent) |
            (-1*l2fc_wtko + twenty_percent)>= l2fc_ltc & l2fc_ltc>= (-1*l2fc_wtko - twenty_percent))
 
+# Genes that overlap in long time course wt vs ko and 20% of wild type value is restored
 rescued_genes_20 <- rescued_df_closest %>% 
   filter(rescued == TRUE) %>% 
   pull(gene_name)
+
 ```
+### Result: 640 genes in long ko time course 
+### Result: 160 genes overlap with wt vs ko
+### Result: 69 genes are rescued by 20% or more to WT levels in ko long time course 
+
+
 
 # Plotting recriprocally rescued genes 
 ```{r genes rescued in KO background upon firre induction (that were sig in wt vs ko)}
@@ -280,18 +300,17 @@ plot(fit2, quantities = TRUE, fontsize = 8)
 dev.off()
 
 ```
-### Result: 65 of 91 genes are recriprocally rescued !
+### Result: 69 of 91 genes are recriprocally rescued !
+### Result: 91 genes are changing in time that overlap wioth homeoostatic changes in KO line
 
 
 
 
-### Long timecourse call significant genes
+# Determining genes that are significant in ko long time course
 
-We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff based on the fold change vs zero.
+```{r ko long time course sig genes at any time point versus 0 timepoint}
 
-```{r}
 
-#TODO start here
 ko_rescue_long_dox_sig <- ko_rescue_long_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
@@ -311,9 +330,15 @@ ko_rescue_long_vszero_sig <- ko_rescue_long_vszero_sig %>%
 ko_rescue_long_vszero_sig <- ko_rescue_long_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
 
-save(ko_rescue_long_vszero_sig, file = "results/ko_rescue_long_vszero_sig.RData")
-```
 
+save(ko_rescue_long_vszero_sig, file = "results/ko_rescue_long_vszero_sig.RData")
+
+```
+### Result: 415 genes are changing in the long ko time course .
+
+
+
+# Plotting sig genes at each timepoint in ko long time course 
 ```{r}
 make_timecourse_lfc_plot(deseq_res = ko_rescue_long_vszero_sig,
                          genes_to_include = unique(ko_rescue_long_vszero_sig$gene_id),
@@ -324,11 +349,13 @@ ggsave(paste0("figures/ko_rescue_long_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
 
-```{r}
+# Overlap of sig genes in ko long time course overlpa with wt vs ko
+```{r Overlap of sig genes in ko long time course overlpa with wt vs ko}
+
 # Let's look at the number of genes overlapping between Firre responders and the KO vs WT
+
 ko_rescue_long_sig_genes <- unique(ko_rescue_long_vszero_sig$gene_id)
 wtko_sig_genes <- unique(wtko_sig$gene_id)
-
 combined_genes <- unique(c(ko_rescue_long_sig_genes, wtko_sig_genes))
 
 mat <- cbind(
@@ -343,12 +370,12 @@ plot(fit2, quantities = TRUE, fontsize = 8)
 grid.text(paste0("P=", signif(ovp, 3)), x = 0.1, y = 0.9)
 dev.off()
 ```
+### Result 102 out 415 long time course genes overlap with 921 wt vs ko genes
 
 
+# Long timecourse Firre responders heatmap
+```{r, heat map of 415 sig genes in long ko time course fig.width=3, fig.height=5}
 
-### Long timecourse Firre responders heatmap
-
-```{r, fig.width=3, fig.height=5}
 # Heatmap of fold-changes for DEGs in the rescue
 # Check that there are no duplicate row names.
 stopifnot(all(length(unique(ko_rescue_long_vszero_sig$gene_id)) == length(unique(ko_rescue_long_vszero_sig$gene_name))))
@@ -379,10 +406,15 @@ h1 <- Heatmap(ko_rescue_long_lfc,
         left_annotation = row_ha)
 draw(h1)
 dev.off()
+# this is because we saved the heatmap output to h1 variable
+# so we need to draw out h1 
 draw(h1)
 ```
 
-```{r}
+
+# Plotting the differentially expressed genes (deg) at each time point
+```{r sig deg at each time point in ko long time course}
+
 load("results/ko_rescue_long_vszero_sig.RData")
 # How many genes are changing in each timepoint?
 deg_per_timepoint <- ko_rescue_long_vszero_sig %>%
@@ -403,18 +435,30 @@ ggplot(deg_per_timepoint, aes(x = timepoint, y = y, fill = direction)) +
 ggsave("figures/long_rescue_ndeg_per_timepoint.pdf",
        height = 2, width = 1.75)  
 ```
+### Result: 37 genes up and 2 down (up reg bias) at 12 hrs 
+### Result: after 12 hours there is more even up and down and many more genes changing
+### There must be redundancies in each time point
 
-### Firre rescued genes heatmap
 
-We can visualize the expression levels of the genes that were significantly differentially expressed in the Firre knockout and dynamically changing in response to Firre's induction in a knockout background.
+
+
+#Firre rescued genes heatmap
 
 ```{r rescue_heatmap, fig.width=3.5, fig.height=6}
+
 # Retrieve the set of genes that is DE in the KO and is significantly changing
 # in the KO rescue experiment. 
 # Retrieve the TPM -- take the mean TPM in each condition.
 rescued_genes_20 <- rescued_df_closest %>% 
   filter(rescued == TRUE) %>% 
-  pull(gene_id)
+  pull(gene_id) 
+
+writeLines(rescued_genes_20, "results/rescued_sig_20-id.txt")
+
+rescued_genes_20 <- rescued_df_closest %>% 
+  filter(rescued == TRUE) %>% 
+  pull(gene_name) 
+writeLines(rescued_genes_20, "results/rescued_sig_20-name.txt")
 
 wtko_samples <- samples %>% 
     filter(cell_type == "ESC", 
@@ -469,7 +513,7 @@ ggsave(paste0("figures/long_rescue_heatmap_", thresh, ".pdf"),
        plot = p1, width = 3.5, height = 5)
 ```
 
-### Rescue PCA
+# Rescued genes PCA
 
 ```{r rescue_pca}
 pca_dat <- prcomp(t(comb_matrix))
@@ -489,3 +533,4 @@ ggsave(paste0("figures/long_rescue_pca_", thresh, ".pdf"),
        width = 3.5, height = 0.9, 
        useDingbats = FALSE)
 ```
+### Result 720 min looks most like KO and then longest time looks mostly like WT
