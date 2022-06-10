@@ -145,7 +145,7 @@ load("results/wt_overexp_long_vs_zero.RData", verbose = T)
 We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff
 based on the fold change vs zero.
 
-```{r}
+```{r significant genes in wt long time course}
 wt_overexp_long_dox_sig <- wt_overexp_long_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
@@ -165,10 +165,17 @@ wt_overexp_long_vszero_sig <- wt_overexp_long_vszero_sig %>%
 save(wt_overexp_long_vszero_sig, file = "results/wt_overexp_long_vszero_sig.RData")
 ```
 
-```{r}
+# Plotting WT long time course wiht make_timecourse function ...
+```{r plotting WT long time course}
+
+# Load in data from above
 load("results/wt_overexp_long_vszero_sig.RData", verbose = T)
+
+# changing lfc col to shrunken lfc
 wt_overexp_long_vszero_sig <- wt_overexp_long_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
+
+# Plotting
 make_timecourse_lfc_plot(deseq_res = wt_overexp_long_vszero_sig,
                          genes_to_include = unique(wt_overexp_long_vszero_sig$gene_id),
                          y_lim = c(-6,6),
@@ -177,6 +184,9 @@ make_timecourse_lfc_plot(deseq_res = wt_overexp_long_vszero_sig,
 ggsave(paste0("figures/wt_overexp_long_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result 575 genes are changing at at least one time point
+
+
 
 ```{r}
 # Overlap with long timecourse rescue
@@ -208,7 +218,7 @@ dev.off()
 
 
 
-### Long timecourse Firre responders heatmap
+# WT Long timecourse Firre responders heatmap
 
 ```{r fig.width=3, fig.height=5}
 # Heatmap of fold-changes for DEGs in the rescue
@@ -225,9 +235,12 @@ wt_overexp_long_lfc <- wt_overexp_long_vszero_sig %>%
 wt_overexp_long_lfc <- cbind(matrix(0, nrow = nrow(wt_overexp_long_lfc), ncol = 1), wt_overexp_long_lfc)
 colnames(wt_overexp_long_lfc)[[1]] <- "0"
 
+#TODO needs to be double
+# TODO check out how it was done in previous file
 pdf(paste0("figures/long_overexpression_responders_heatmap_", thresh, ".pdf"),
     width = 3, height = 5)
-ht1 <- Heatmap(wt_overexp_long_lfc, 
+# ht1 <- Heatmap(wt_overexp_long_lfc, 
+Heatmap(wt_overexp_long_lfc, 
         name = "l2fc",
         cluster_columns = FALSE, show_row_names = FALSE, 
         col = colorRamp2(seq(-3,3,length.out = 100), col_pal10))
@@ -236,6 +249,7 @@ dev.off()
 draw(ht1)
 ```
 
+# number of genes changing at a given time point (redundant gene ids if sig at more than one timepoint)
 ```{r}
 load("results/wt_overexp_long_vszero_sig.RData")
 # How many genes are changing in each timepoint?
