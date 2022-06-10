@@ -30,7 +30,9 @@ Major results:
 
 
 ```{r load, include=FALSE}
+
 load("../01_setup/results/rnaseq_data.RData")
+
 ```
 
 We would like to check that Firre's expression is actually induced by the addition of
