@@ -104,6 +104,8 @@ if(!file.exists("results/ko_rescue_short.RData")) {
              timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
     # merging the "for loop-ish" function results
   }) %>% bind_rows()
+  
+  
 ```
 
 # Filtering Deseq result files and generating shrunken lfc with apeglm package/function
@@ -138,10 +140,10 @@ if(!file.exists("results/ko_rescue_short.RData")) {
   ko_rescue_short_shrnklfc <- ko_rescue_short_shrnklfc %>%
     left_join(ko_rescue_short_maxfc)
   
-  save(ko_rescue_short_lfc, ko_rescue_short_shrnklfc, file = "results/ko_rescue_short.RData")
+  save(ko_rescue_short_lfc, ko_rescue_short_shrnklfc, file = "results/ko_rescue_short_shrunk_lfc.RData")
 }
 
-load("results/ko_rescue_short.RData")
+load("results/ko_rescue_short_shrunk_lfc.RData")
 ```
 
 # Deseq on all short time points versus 0  timepoint 
@@ -171,6 +173,7 @@ if(!file.exists("results/ko_rescue_short_vs_zero.RData")) {
   ko_rescue_short_vszero_dds <- DESeq(ko_rescue_short_vszero_dds)
   res_names <- resultsNames(ko_rescue_short_vszero_dds)
   
+  # filtering results to vs_0 (removing intercept)
   vs_zero_res <- res_names[grepl("_vs_0", res_names)]
   ko_rescue_short_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
     lfcShrink(ko_rescue_short_vszero_dds, 
@@ -194,6 +197,8 @@ load("results/ko_rescue_short_vs_zero.RData")
 These are the genes that are reciprocally regulated in the KO vs WT and the Firre induced line.
 
 ```{r}
+
+# TODO start here
 # We need the KO vs WT data
 load("../04_firre_ko_vs_wt/results/wtko.RData")
 
@@ -252,6 +257,7 @@ ggplot(rescued_df_closest, aes(x = l2fc_wtko, y = l2fc_ltc, color = rescued)) +
 ggsave(paste0("figures/short_rescue_lfc_scatter_", thresh, ".pdf"), 
        height = 3, width = 3, useDingbats = FALSE)
 ```
+
 
 ### Short timecourse call significant genes
 
