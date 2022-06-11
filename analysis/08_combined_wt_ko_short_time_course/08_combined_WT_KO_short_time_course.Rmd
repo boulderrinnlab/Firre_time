@@ -31,6 +31,7 @@ load("../01_setup/results/rnaseq_data.RData", verbose = T)
 
 # Here we are combining the WT and KO Firre transgene lines in a model
 # That will account for both genotype, dox and timepoint
+### results will be saved as "short_combined_dox_controlled.RData"
 
 ```{r long_timecourse}
 if(!file.exists("results/short.RData")) {
@@ -48,6 +49,7 @@ if(!file.exists("results/short.RData")) {
   stopifnot(all(rownames(short_counts) == genes$gene_id))
   
   # DESeq2 -- controlling for doxycycline; likelihood ratio test
+  # LRT for dox control performed here
   short_dds <- DESeqDataSetFromMatrix(countData = short_counts, 
                                       colData = short_samples, 
                                       design = ~ firre_ko + firre_induced + timepoint + timepoint*firre_induced)
@@ -84,7 +86,6 @@ if(!file.exists("results/short.RData")) {
       mutate(result_name = x,
              timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
   }) %>% bind_rows()
-  
   
   # Calculate the maximum fold-change in any one timepoint
   short_maxfc <- short_shrnklfc %>%
@@ -123,6 +124,7 @@ if(!file.exists("results/short_vs_zero.RData")) {
   stopifnot(all(rownames(short_vszero_counts) == genes$gene_id))
   
   # DESeq2 -- model for both genotypes and time but not conrol line LRT test
+  # NO LRT test 
   short_vszero_dds <- DESeqDataSetFromMatrix(countData = short_vszero_counts,
                                              colData = short_vszero_samples,
                                              design = ~ firre_ko + timepoint)
@@ -143,18 +145,18 @@ if(!file.exists("results/short_vs_zero.RData")) {
       mutate(result_name = x,
              timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
-  # short_vszero_shrnklfc_notadjust_for_firreko <- short_vszero_shrnklfc 
-  # save(short_vszero_shrnklfc_notadjust_for_firreko, file = "results/short_vs_zero_notadjust_for_firreko.RData")
+ 
+  # saving
   save(short_vszero_shrnklfc, file = "results/short_combined_vs_zero.RData")
 }
 
 load("results/short_combined_vs_zero.RData", verbose = T)
-# load("results/short_vs_zero_notadjust_for_firreko.RData", verbose = T)
-# short_vszero_shrnklfc <- short_vszero_shrnklfc_notadjust_for_firreko
+
 ```
 
+# Here we are going to perform Deseq on the combined models versus 0 time point for all timepoints long and short
 
-```{r}
+```{r combined WT and KO all timepoints no control line }
 if(!file.exists("results/combined_vs_zero.RData")) {
   
   combined_vszero_samples <- samples %>%
@@ -166,17 +168,18 @@ if(!file.exists("results/combined_vs_zero.RData")) {
   stopifnot(all(rownames(combined_vszero_samples) == colnames(combined_vszero_counts)))
   stopifnot(all(rownames(combined_vszero_counts) == genes$gene_id))
   
-  # DESeq2 -- controlling for doxycycline; likelihood ratio test
+  # DESeq2 -- model across all time points versus 0 timepoint
+  # NO LRT for dox controls 
   combined_vszero_dds <- DESeqDataSetFromMatrix(countData = combined_vszero_counts,
                                              colData = combined_vszero_samples,
                                              design = ~ firre_ko + timepoint)
   combined_vszero_dds <- DESeq(combined_vszero_dds)
   res_names <- resultsNames(combined_vszero_dds)
   
+  # getting result files
   vs_zero_res <- res_names[grepl("_vs_0", res_names)]
   
-  library(tidyverse)
-  library(DESeq2)
+  # creating shrunken lfc 
   combined_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
     lfcShrink(combined_vszero_dds, 
               coef = x,
@@ -187,20 +190,20 @@ if(!file.exists("results/combined_vs_zero.RData")) {
       mutate(result_name = x,
              timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
-  # combined_vszero_shrnklfc_notadjust_for_firreko <- combined_vszero_shrnklfc 
-  # save(combined_vszero_shrnklfc_notadjust_for_firreko, file = "results/combined_vs_zero_notadjust_for_firreko.RData")
-  save(combined_vszero_shrnklfc, file = "results/combined_vs_zero_notimecourselengthfactor.RData")
+  
+  
+  save(combined_vszero_shrnklfc, file = "results/combined_vs_zero_all_time_points.RData")
 }
 ```
 
-
-
-### Short timecourse call significant genes
+# Creating list of combined WT and KO short timecourse sig genes
+# Will merge versus zero with dox controled and add dox to object name
+# We will use Pval and shrnklfc thresholds 
 
 We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff
 based on the fold change vs zero.
 
-```{r}
+```{r creating sig genes in combined WT and KO short time course}
 short_dox_sig <- short_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
@@ -217,7 +220,7 @@ short_vszero_sig <- short_vszero_sig %>%
 short_vszero_sig <- short_vszero_sig %>%
   filter(max_fc > l2fc_thresh)
 
-save(short_vszero_sig, file = "results/short_vszero_sig.RData")
+save(short_vszero_sig, file = "results/combined_short_vszero_sig.RData")
 ```
 
 ```{r}
