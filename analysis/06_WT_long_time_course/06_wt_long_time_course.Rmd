@@ -250,9 +250,10 @@ draw(ht1)
 ```
 
 # number of genes changing at a given time point (redundant gene ids if sig at more than one timepoint)
-```{r}
+```{r determinnig number of genes changing at each timepoint in WT long time course}
 load("results/wt_overexp_long_vszero_sig.RData")
 # How many genes are changing in each timepoint?
+# organizing data
 deg_per_timepoint <- wt_overexp_long_vszero_sig %>%
   filter(abs(log2FoldChange) > l2fc_thresh) %>%
   mutate(direction = ifelse(log2FoldChange > 0, "up", "down")) %>%
@@ -261,6 +262,7 @@ deg_per_timepoint <- wt_overexp_long_vszero_sig %>%
   mutate(y = ifelse(direction == "up", ndeg, ndeg*-1))
 deg_per_timepoint$timepoint <- factor(deg_per_timepoint$timepoint, labels = c("12", "24", "48", "96"))
 
+# plotting
 ggplot(deg_per_timepoint, aes(x = timepoint, y = y, fill = direction)) +
   geom_bar(stat = "identity") +
   geom_hline(yintercept = 0) +
@@ -268,6 +270,7 @@ ggplot(deg_per_timepoint, aes(x = timepoint, y = y, fill = direction)) +
   geom_text(data = deg_per_timepoint %>% filter(direction == "down"), aes(label=ndeg), position=position_dodge(width=0.9), vjust=1.1) +
   guides(fill = FALSE) +
   ylim(-65,75)
+
 ggsave("figures/long_overexp_ndeg_per_timepoint.pdf",
        height = 2, width = 1.75)  
 ```
