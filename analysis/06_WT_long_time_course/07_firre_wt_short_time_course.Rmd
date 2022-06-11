@@ -201,7 +201,7 @@ ggsave(paste0("figures/wt_overexp_short_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
 
-# Plotting 
+# Plotting all sig genes individually
 ```{r}
 deseq_res <- wt_overexp_short_vszero_sig
 genes_to_include <- unique(wt_overexp_short_vszero_sig$gene_id)
@@ -247,6 +247,7 @@ genes_to_include <- unique(wt_overexp_short_vszero_sig$gene_id)
   
   deg$gene_name <- factor(deg$gene_name, levels = deg_fc$gene_name)
   
+  # Plotting with facet wrap for each gene
   g1 <- ggplot(deg, aes(x = timepoint, y = l2fc_shrunken, group = gene_id)) +
     geom_hline(yintercept = 0) +
     geom_line(alpha = 0.2, color = "gray70") +
@@ -254,12 +255,15 @@ genes_to_include <- unique(wt_overexp_short_vszero_sig$gene_id)
     facet_wrap(~gene_name, scales = "free_y") +
     scale_x_continuous(breaks = seq(from = 0, to = 330, by = 30), labels = c("0", "", "1", "", "2", "", "3", "", "4", "", "5", "" ) )
   show(g1) 
+  
 ggsave("figures/short_overexp_individual_fc_profiles.pdf", device = cairo_pdf,
        height = 4.5, width = 5.5)
 ```
 
+# Determining how many genes are differentially expressed at eahc time point (redundancy can occur)
 ```{r}
 load("results/wt_overexp_short_vszero_sig.RData")
+
 # How many genes are changing in each timepoint?
 deg_per_timepoint <- wt_overexp_short_vszero_sig %>%
   filter(abs(log2FoldChange) > l2fc_thresh) %>%
@@ -268,6 +272,7 @@ deg_per_timepoint <- wt_overexp_short_vszero_sig %>%
   summarize(ndeg = n()) %>%
   mutate(y = ifelse(direction == "up", ndeg, ndeg*-1))
 
+# Plotting up and down genes at eahc time point
 ggplot(deg_per_timepoint, aes(x = timepoint, y = y, fill = direction)) +
   geom_bar(stat = "identity") +
   geom_hline(yintercept = 0) +
@@ -276,11 +281,17 @@ ggplot(deg_per_timepoint, aes(x = timepoint, y = y, fill = direction)) +
     scale_x_continuous(breaks = seq(from = 0, to = 330, by = 30), labels = c("0", "", "1", "", "2", "", "3", "", "4", "", "5", "" ) ) +
   guides(fill = FALSE) +
   ylim(-4,28)
+
+# Saving
 ggsave("figures/short_overexp_ndeg_per_timepoint.pdf", 
        height = 2, width = 2.5)  
 ```
+### Result: we see the most up regulated biases in WT short time course !
+### In the next files we will combine both KO and WT transgene timecourses 
+### This could be reason all are up !
 
-```{r}
+
+```{r genes rescued in ko and changing in WT short time course}
 load("../06_short_timecourse_rescue/results/ko_rescue_short_vszero_sig.RData")
 # Let's look at the number of genes overlapping between Firre responders and the KO vs WT
 ko_rescue_short_sig_genes <- unique(ko_rescue_short_vszero_sig$gene_id)
@@ -294,6 +305,9 @@ mat <- cbind(
 )
 fit2 <- euler(mat)
 
+# using custom function calculate overalp pval
+# finding genes that rescue relative to wt_ko
+
 ovp <- calculate_overlap_pval(ko_rescue_short_sig_genes, wt_overexp_short_sig_genes, num_measured_genes)
 pdf("figures/short_timecourse_rescue_overexp_overlap.pdf", height = 2, width = 2)
 plot(fit2, quantities = TRUE, fontsize = 8)
@@ -303,7 +317,7 @@ dev.off()
 
 
 
-### Short timecourse Firre responders heatmap
+# WT Short timecourse Firre responders heatmap
 
 ```{r fig.width=4, fig.height=3.5}
 # Heatmap of fold-changes for DEGs in the rescue
