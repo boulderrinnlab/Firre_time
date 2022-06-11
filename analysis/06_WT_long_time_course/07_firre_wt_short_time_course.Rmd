@@ -16,21 +16,32 @@ library(ggrepel)
 library(ComplexHeatmap)
 library(circlize)
 library(seriation)
-source("../util/_plot_theme.R")
-source("../util/_util.R")
+source("../../util/_plot_theme.R")
+source("../../util/_util.R")
 source("../01_setup/assumptions.R")
 
 # Keep track of thresholds for figure naming
 thresh <- paste0("pval", pval_thresh, "_l2fc", round(l2fc_thresh, 2))
 ```
 
+# Loading in all the RNaseq results
 ```{r load, include=FALSE}
+
 load("../01_setup/results/rnaseq_data.RData")
+
 ```
 
-For this experiment, we induced the expression of Firre with an rTTA element by adding doxycycline to the cells. We see that Firre is indeed expressed in the KO background after the addition of doxycycline. The drug does instigate some gene expression changes on its own, so we will control for the effects by using a linear model which accounts for the effect of dox.
+# Here we performed Firre induction in the WT background from 30 min to 330 min (5.5 hrs)
+# We used an rTTA driven Firre transgene and our control for dox off-tartget affects was 
+# to use a normal WT mESC line (lacking a firre transgene) and expose to dox  at same timepoints
 
-```{r long_timecourse}
+
+# Deseq and ShrunkenFoldChange of WT short time course MESCs
+### First performing DEseq on the short time course with a linear model that accounts for the control line
+### Then a Likehood ratio test (LRT) between full (with control) and reduced (with out control term) 
+
+```{r WT short_timecourse Deseq with interaction term for control cell line}
+
 if(!file.exists("results/wt_overexp_short.RData")) {
 
   # Filter to ESC KO long timecourse
@@ -54,6 +65,8 @@ if(!file.exists("results/wt_overexp_short.RData")) {
   res_names <- resultsNames(wt_overexp_short_dds)
   dynamic_res <- res_names[grepl("firre_inducedfirre_induced.timepoint", res_names)]
   
+  # cleaning up each result file in "for loop" generic function x
+  # getting time points and merging in gene_name
   wt_overexp_short_lfc <- lapply(dynamic_res, function(x) {
     results(wt_overexp_short_dds, 
             name = x) %>%
@@ -81,20 +94,22 @@ if(!file.exists("results/wt_overexp_short.RData")) {
     group_by(gene_id) %>%
     summarize(max_fc = max(abs(log2FoldChange))) 
   
+  # merging in shrnklfc col 
   wt_overexp_short_shrnklfc <- wt_overexp_short_shrnklfc %>%
     left_join(wt_overexp_short_maxfc)
   
+  # saving
   save(wt_overexp_short_lfc, wt_overexp_short_shrnklfc, file = "results/wt_overexp_short.RData")
 }
 
 load("results/wt_overexp_short.RData")
 ```
 
-### Fold changes vs zero timepoint
+# Fold changes vs zero timepoint with out control cell line.
+# Here the model term is just time point (lacking interaction term of  firre_induced*timepoint)
 
-This is without considering the control cell line.
+```{r WT short time course with out interaction term for control -- just changes in transgene line}
 
-```{r}
 if(!file.exists("results/wt_overexp_short_vs_zero.RData")) {
 
   wt_overexp_short_vszero_samples <- samples %>%
@@ -102,19 +117,22 @@ if(!file.exists("results/wt_overexp_short_vs_zero.RData")) {
            timecourse_length == "short",
            firre_ko == "WT",
            firre_induced == "firre_induced")
+  
+  # grabbing salmon counts
   wt_overexp_short_vszero_counts <- salmon_gene_counts[,wt_overexp_short_vszero_samples$sample_id]
   
   # Check ordering
   stopifnot(all(rownames(wt_overexp_short_vszero_samples) == colnames(wt_overexp_short_vszero_counts)))
   stopifnot(all(rownames(wt_overexp_short_vszero_counts) == genes$gene_id))
   
-  # DESeq2 -- controlling for doxycycline; likelihood ratio test
+  # DESeq2 -- no LRT and just versus 0 time-point results
   wt_overexp_short_vszero_dds <- DESeqDataSetFromMatrix(countData = wt_overexp_short_vszero_counts,
                                                        colData = wt_overexp_short_vszero_samples,
                                                        design = ~ timepoint)
   wt_overexp_short_vszero_dds <- DESeq(wt_overexp_short_vszero_dds)
   res_names <- resultsNames(wt_overexp_short_vszero_dds)
   
+  # cleaning up values with generic function to clean up each result file
   vs_zero_res <- res_names[grepl("_vs_0", res_names)]
   wt_overexp_short_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
     lfcShrink(wt_overexp_short_vszero_dds, 
@@ -127,53 +145,67 @@ if(!file.exists("results/wt_overexp_short_vs_zero.RData")) {
              timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
   
+  # saving
   save(wt_overexp_short_vszero_shrnklfc, file = "results/wt_overexp_short_vs_zero.RData")
 }
 
 load("results/wt_overexp_short_vs_zero.RData")
 ```
 
-### Short timecourse call significant genes
+# Determining WT Short timecourse call significant genes
+# Note dox in title indicates that control line model genes were used
 
-We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff
-based on the fold change vs zero.
+```{r Determing significant genes that overlap in dox controlled model}
 
-```{r}
+# loding in sig genes from model considering control line (wt_overexp_short_shrnklfc)
+# From : wt_overexp_short.RData
 wt_overexp_short_dox_sig <- wt_overexp_short_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
+# Laoding in sig genes from model that does not consider control (vszero)
 wt_overexp_short_vszero_sig <- wt_overexp_short_vszero_shrnklfc %>%
+  # finding overlap of genes sig in both models
   filter(gene_id %in% wt_overexp_short_dox_sig$gene_id)
 
+# determining max fold change for each gene across time points
 wt_overexp_short_vszero_maxfc <- wt_overexp_short_vszero_sig %>%
   group_by(gene_id) %>%
   summarize(max_fc = max(abs(log2FoldChange))) 
 
+# merging in max foldchange column
 wt_overexp_short_vszero_sig <- wt_overexp_short_vszero_sig %>%
   left_join(wt_overexp_short_vszero_maxfc)
 
+# filtering for genes greater than Pval and lfc threshold
 wt_overexp_short_vszero_sig <- wt_overexp_short_vszero_sig %>%
   filter(max_fc > l2fc_thresh)
 
+# saving significant genes
 save(wt_overexp_short_vszero_sig, file = "results/wt_overexp_short_vszero_sig.RData")
 ```
 
-```{r}
+# Plotting WT short time course sig genes
+```{r plotting WT short time course versus 0 sig genes}
+
 load("results/wt_overexp_short_vszero_sig.RData", verbose = T)
 wt_overexp_short_vszero_sig <- wt_overexp_short_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
+
+# pLotting the data with make_timecourse_lfc_plot function
 make_timecourse_lfc_plot(deseq_res = wt_overexp_short_vszero_sig,
                          genes_to_include = unique(wt_overexp_short_vszero_sig$gene_id),
                          y_lim = c(-6,6),
                          draw_plot = FALSE)
-
+# saving
 ggsave(paste0("figures/wt_overexp_short_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
 
+# Plotting 
 ```{r}
 deseq_res <- wt_overexp_short_vszero_sig
 genes_to_include <- unique(wt_overexp_short_vszero_sig$gene_id)
+
 # Let's plot the downregulated genes separately
  deg <- deseq_res %>%
     filter(gene_id %in% genes_to_include) %>%
