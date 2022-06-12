@@ -191,7 +191,7 @@ if(!file.exists("results/combined_vs_zero.RData")) {
              timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
   
-  
+  # saving 
   save(combined_vszero_shrnklfc, file = "results/combined_vs_zero_all_time_points.RData")
 }
 ```
@@ -200,10 +200,8 @@ if(!file.exists("results/combined_vs_zero.RData")) {
 # Will merge versus zero with dox controled and add dox to object name
 # We will use Pval and shrnklfc thresholds 
 
-We'll make the p-value cutoff based on the dox controlled model and the l2fc cutoff
-based on the fold change vs zero.
-
 ```{r creating sig genes in combined WT and KO short time course}
+#TODO start here
 short_dox_sig <- short_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
