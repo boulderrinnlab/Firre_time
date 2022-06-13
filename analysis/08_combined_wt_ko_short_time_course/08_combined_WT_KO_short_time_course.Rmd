@@ -55,7 +55,7 @@ if(!file.exists("results/short.RData")) {
                                       design = ~ firre_ko + firre_induced + timepoint + timepoint*firre_induced)
   short_dds <- DESeq(short_dds, test = "LRT", reduced = ~ firre_ko + firre_induced + timepoint)
   
-  #TODO got this error
+  # Note this error occured
   # 1 rows did not converge in beta, labelled in mcols(object)$fullBetaConv. Use larger maxit argument with nbinomLRT
   
   # Compile results
