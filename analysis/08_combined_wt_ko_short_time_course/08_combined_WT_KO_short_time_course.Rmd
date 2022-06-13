@@ -201,30 +201,44 @@ if(!file.exists("results/combined_vs_zero.RData")) {
 # We will use Pval and shrnklfc thresholds 
 
 ```{r creating sig genes in combined WT and KO short time course}
-#TODO start here
+
+# filtering to sig genes in dox control LRT test "short_shrnklfc"
+# This means induced in WT and KO firre induced, but not in dox control lines
 short_dox_sig <- short_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
+# Those genes that were in the combined short versus 0 sig genes
+# Those genes that are also in the dox control line
 short_vszero_sig <- short_vszero_shrnklfc %>%
   filter(gene_id %in% short_dox_sig$gene_id)
 
+# determining max fold change 
 short_vszero_maxfc <- short_vszero_sig %>%
   group_by(gene_id) %>%
   summarize(max_fc = max(abs(log2FoldChange))) 
 
+# merging in new col for max fold change with short_vszero_sig
 short_vszero_sig <- short_vszero_sig %>%
   left_join(short_vszero_maxfc)
 
+# filtering on threshold
 short_vszero_sig <- short_vszero_sig %>%
   filter(max_fc > l2fc_thresh)
 
+# saving results
 save(short_vszero_sig, file = "results/combined_short_vszero_sig.RData")
 ```
 
-```{r}
-load("results/short_vszero_sig.RData", verbose = T)
+# Plotting combined sig (dox controlled) genes with "make_timecourse_lfc_plot function
+```{r plotting WT KO combined short sig dox controlled}
+
+load("results/combined_short_vszero_sig.RData", verbose = T)
+
+# changing lfc col name
 short_vszero_sig <- short_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
+
+# Plotting
 make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
                          genes_to_include = unique(short_vszero_sig$gene_id),
                          y_lim = c(-6,6),
@@ -233,19 +247,33 @@ make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
 ggsave(paste0("figures/short_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 ```
+### Result: the most conservative firre target genes
+### Result: 29 are induced and one downregulated
+### Result: suggestive that firre is an RNA-based trans activator of genes
 
-```{r}
+
+# Looking for rescue genes (firre should be positive control)
+```{r finding overlap with rescue genes}
+
 combined_sig_genes <- unique(short_vszero_sig$gene_id)
+# overlapping %in% combined_sig_genes and rescued 20% WT KO levels 
 rescued_gene_ids_20[rescued_gene_ids_20 %in% combined_sig_genes]
 ```
+### Result: only rescued gene in combined short dox controlled is Firre (ENSMUSG00000085396.7)
 
 
-```{r}
-load("results/short_vszero_sig.RData", verbose = T)
-load("results/combined_vs_zero_notimecourselengthfactor.RData", verbose = T)
+# Plotting each of the 30 combined short dox controlled sig genes across all timepoints 
+```{r 0 combined sig genes across all timepoints }
+
+# Loading in results 
+load("results/combined_short_vszero_sig.RData", verbose = T)
+load("results/combined_vs_zero_all_time_points.RData", verbose = T)
+
+
 sig_combined_vs_zero <- combined_vszero_shrnklfc %>% filter(gene_id %in% unique(short_vszero_sig$gene_id))
 deseq_res <- sig_combined_vs_zero
 genes_to_include <- unique(sig_combined_vs_zero$gene_id)
+
 # Let's plot the downregulated genes separately
  deg <- deseq_res %>%
     filter(gene_id %in% genes_to_include) %>%
@@ -261,15 +289,7 @@ genes_to_include <- unique(sig_combined_vs_zero$gene_id)
   deg <- deg %>%
     bind_rows(deg_zero)
   
-  # if(length(unique(deg$gene_id)) > 1) {
-  #   deg <- deg %>%
-  #     mutate(x_adjust = scale(log10(baseMean)),
-  #            tp_adjust = timepoint + x_adjust*x_adjust_scale)
-  # } else {
-  #   deg <- deg %>%
-  #     mutate(tp_adjust = timepoint)
-  # }
-  
+  # proving information of up and down and max fold change 
   num_deg <- deg  %>%
     group_by(gene_id) %>%
     summarize(max_fc = log2FoldChange[which.max(abs(log2FoldChange))]) %>%
@@ -287,6 +307,7 @@ genes_to_include <- unique(sig_combined_vs_zero$gene_id)
   
   deg$gene_name <- factor(deg$gene_name, levels = deg_fc$gene_name)
   
+  # Plotting each gene seperately across all time points
   g1 <- ggplot(deg, aes(x = timepoint, y = log2FoldChange, group = gene_id)) +
     geom_hline(yintercept = 0) +
     geom_line(alpha = 0.2, color = "gray70") +
@@ -294,37 +315,43 @@ genes_to_include <- unique(sig_combined_vs_zero$gene_id)
     facet_wrap(~gene_name, scales = "free_y") +
     scale_x_continuous(breaks = c(0,330, 720, 1440, 2880, 5670), labels = c("0", "5.5", "12","24", "48","96") )
   show(g1)
+
+  # Saving
 ggsave("figures/short_and_long_individual_fc_profiles.pdf",
        height = 4.5, width = 6.5)
 ```
 
-```{r}
-# Figure out whether these genes stay differentially expressed
-# or return to baseline in the long timecourse.
-```
+# Determining overlap of genes in short time course of WT and KO sepeately 
+```{r overlap in short time course for WT and KO seperate} 
 
+# Loading in the WT and KO short time courses vszero datasets 
+load("results/combined_short_vszero_sig.RData", verbose = T)
 
-```{r}
-load("results/short_vszero_sig.RData", verbose = T)
-load("../09_short_timecourse_overexpression/results/wt_overexp_short_vszero_sig.RData", verbose = T)
-load("../06_short_timecourse_rescue/results/ko_rescue_short_vszero_sig.RData")
+load("/scratch/Shares/rinn/JR/Firre_time/analysis/07_wt_short_time_course/results/wt_overexp_short_vszero_sig.RData", verbose = T)
 
+load("/scratch/Shares/rinn/JR/Firre_time/analysis/05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData")
+
+# making a unique list of each backgrounds sig genes
 ko_rescue_1 <- unique(ko_rescue_short_vszero_sig$gene_name)
 wt_overexp_2 <- unique(wt_overexp_short_vszero_sig$gene_name)
 short_3 <- unique(short_vszero_sig$gene_name)
 
+# finding overlap
 individual_overlaps_12 <- intersect(ko_rescue_1, wt_overexp_2)
-length(individual_overlaps)
 
-length(ko_rescue) - length(individual_overlaps)
-length(wt_overexp) - length(individual_overlaps)
+# how many overlap
+length(individual_overlaps_12)
+
+# determining if overlaps in each background
+length(ko_rescue_1) - length(individual_overlaps_12)
+length(wt_overexp_2) - length(individual_overlaps_12)
 
 all_overlaps_123 <- intersect(individual_overlaps_12, short_3)
 ov_23 <- intersect(wt_overexp_2, short_3)
 ov_13 <- intersect(ko_rescue_1, short_3)
 library(VennDiagram)
 
-
+# Plotting ven diagram
 draw.triple.venn(area1 = length(ko_rescue_1), 
                  area2 = length(wt_overexp_2), 
                  area3 = length(short_3),
@@ -348,32 +375,39 @@ ov_mat <- cbind(
   combined = all_genes %in% short_3
 )
 fit2 <- euler(ov_mat)
+
+# Plotting
 pdf("figures/short_timecourse_overlap_venn.pdf")
 plot(fit2, quantities = TRUE)
 dev.off()
 ```
+### Result: strong overlap of firre targets independent of geneotype or anyalysis 
 
 
-### Short timecourse Firre responders heatmap
 
-```{r fig.width=4, fig.height=4}
+# Short timecourse Firre responders heatmap for combined WT KO and dox controlled
+
+```{r fig.width=4, fig.height=4 Firre responders heatmap for combined WT KO and dox controlled}
+
 # Let's look at the set of genes that overlap in the two genetic backgrounds
-load("../06_short_timecourse_rescue/results/ko_rescue_short_vszero_sig.RData", verbose = T)
-load("../09_short_timecourse_overexpression/results/wt_overexp_short_vszero_sig.RData", verbose = T)
+load("../05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData", verbose = T)
+load("../07_wt_short_time_course/results/wt_overexp_short_vszero_sig.RData", verbose = T)
 
+# finding overlaps
 overlapping_genes <- unique(ko_rescue_short_vszero_sig$gene_id)[unique(ko_rescue_short_vszero_sig$gene_id) %in% unique(wt_overexp_short_vszero_sig$gene_id)]
 
 # Heatmap of fold-changes for DEGs in the rescue
 # Check that there are no duplicate row names.
 stopifnot(all(length(unique(short_vszero_sig$gene_id)) == length(unique(short_vszero_sig$gene_name))))
 
+# converting to matrix for heatmap
 short_lfc <- short_vszero_sig %>%
   dplyr::select(gene_name, timepoint, log2FoldChange) %>%
   pivot_wider(names_from = timepoint, names_sort = TRUE, values_from = log2FoldChange) %>%
   column_to_rownames("gene_name") %>%
   as.matrix()
 
-
+# getting order right
 ordering <- short_vszero_sig %>%
   filter(abs(log2FoldChange) > 0.2) %>%
   group_by(gene_name) %>%
