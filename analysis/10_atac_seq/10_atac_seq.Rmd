@@ -229,25 +229,29 @@ promoters_df <- promoters_gr %>% as.data.frame() %>%
 # finding overlaps of promoter regions in promoters_df
 promoters_gr <- promoters_gr[promoters_gr$gene_id %in%promoters_df$gene_id]
 
-# establishing peak centers building Ranges 
+# establishing peak centers building Ranges for sig atac peaks
 peak_centers <- start(sig_atac_gr) + round(width(sig_atac_gr)/2)
 sig_atac_center <- GRanges(seqnames = seqnames(sig_atac_gr),
                            ranges = IRanges(start = peak_centers,
                                             end = peak_centers),
                            interval_id = sig_atac_gr$interval_id)
-# 10Kb off set from peak center
-offset <- 1e6
 
-# centering peaks
+# setting peak to 10Kb up and downstream from peak center
+offset <- 1e5
+
+# creating 10Kb up and downstream of peak center with offset
 start(sig_atac_center) <- start(sig_atac_center) - offset
 end(sig_atac_center) <- end(sig_atac_center) + offset
 
 # overlaps with TSS for sig atac peak centers
 peak_tss_overlaps <- findOverlaps(promoters_gr, sig_atac_center)
 
-# finding a bunch of overlapping features with atac peak centers 
+# making Granges into data frame
 atac_df <- sig_atac_center %>% as.data.frame()
 promoters_df <- promoters_gr %>% as.data.frame()
+
+# finding a bunch of overlapping features with atac peak centers 
+# @to is atac sig GR @ from is promters GR
 overlapping_df <- atac_df[peak_tss_overlaps@to, ]
 overlapping_df$gene_id <- promoters_df$gene_id[peak_tss_overlaps@from]
 overlapping_df$gene_name <- promoters_df$gene_name[peak_tss_overlaps@from]
@@ -255,22 +259,29 @@ overlapping_df$gene_tss <- promoters_df$start[peak_tss_overlaps@from]
 overlapping_df$gene_chr <- promoters_df$seqnames[peak_tss_overlaps@from]
 overlapping_df$gene_strand <- promoters_df$strand[peak_tss_overlaps@from]
 
-#
+# calculating distance from TSS
+# subtracting peak center from the TSS to find distance
 overlapping_df <- overlapping_df %>%
   mutate(dist_to_tss = gene_tss - (start+offset),
          dist_to_peak = (start+offset) - gene_tss)
 
+# some distances are positive and negative depending on up or down stream
+# fixing to plot so they are all in the same 
 # Flip the minus strand differences so that it's a TSS centric view
 overlapping_df[overlapping_df$gene_strand == "-", "dist_to_peak"] <- -1* overlapping_df[overlapping_df$gene_strand == "-", "dist_to_peak"] 
 
-#TODO not sure
+# finding overlaps with sig genes in short combined
 overlapping_df$deg <- overlapping_df$gene_name %in%short_vszero_sig$gene_name
+
+# making a new col of random values "runif" r uniform dist
 overlapping_df$y <- runif(nrow(overlapping_df))
 
 # Gfap has a closer peak changes that explains its expression change.
+# there are two peaks near GFAP so grabbing the closest one
 overlapping_df$deg[overlapping_df$interval_id == "Interval_26047" &
                      overlapping_df$gene_name == "Gfap"] <- FALSE
 
+# plotting position of ATAC peak distance to nearest TSS
 ggplot(overlapping_df %>% filter(gene_name != "Firre", deg == TRUE), aes(x = dist_to_peak, fill = deg)) +
   geom_density(adjust = 1.2) +
   geom_vline(xintercept = 0, lty = 2) +
@@ -280,7 +291,7 @@ ggplot(overlapping_df %>% filter(gene_name != "Firre", deg == TRUE), aes(x = dis
                      labels = c("-100", "-50", "TSS", "50", "100"),
                      limits = c(-1e5,1e5))
 
-#TODO no peaks show up
+# saving
 ggsave("figures/atac_peak_tss_density.pdf", height = 2, width = 2.5)
 ```
 
@@ -291,14 +302,16 @@ ggsave("figures/atac_peak_tss_density.pdf", height = 2, width = 2.5)
 atac_lfc <- atac_lfc %>%
   mutate(sig = ifelse(padj < pval_thresh, "sig", "ns"))
 
-# We don't need 50,000 overlapping points at approximately 
-# zero fold-change. It will make the plot unweidy and
-# slow down illustrator. So let's subsample.
+# We don't need 50,000 overlapping points at approximately
+# subsetting to the non-significant peaks = 50,000
+# let's only take 500 ns peaks for volcano plot
+
 atac_lfc_ns <- atac_lfc %>%
   filter(sig == "ns",
          !is.na(padj)) %>%
   sample_n(500)
 
+# merging atac lfc with atac_lfc_ns
 atac_lfc_subset <- bind_rows(atac_lfc %>% filter(sig == "sig"),
                              atac_lfc_ns)
 
@@ -377,11 +390,14 @@ draw(ht1)
 # TODO start here
 load("../01_setup/results/rnaseq_data.RData")
 
+# filtering to significant genes that have atac peaks within 100Kb
 peak_gene_overlaps <- overlapping_df %>% filter(deg == TRUE)
 
+# subsetting to interval_id 
 peak2gene <- peak_gene_overlaps %>%
   dplyr::select(interval_id, gene_name)
 
+# filter expression values of genes that have sig deg and sig atac
 expr <- tpm %>% 
   filter(gene_name %in% peak_gene_overlaps$gene_name) %>%
   pivot_longer(3:ncol(.), names_to = "sample_id", values_to = "tpm") %>%
@@ -392,6 +408,7 @@ expr <- tpm %>%
   mutate(timepoint = as.numeric(as.character(timepoint))) %>%
   left_join(peak2gene)
 
+# getting rlog counts for atac peaks
 peak <- atac_rlog_counts %>%
   filter(interval_id %in% peak_gene_overlaps$interval_id,
          firre_induced == "firre_induced") %>%
@@ -400,11 +417,15 @@ peak <- atac_rlog_counts %>%
   left_join(peak2gene)
 
 
+# merging in tpm of deg genes and rlog of sig atac peaks overlapping deg
 combined_expr_peak <- expr %>% left_join(peak)
 
-# Normalize values between min and max
+# Normalize values between min and max = percentage of signal for each gene
+# 0 = min val and 1 = max
+# this just defines the function that will be run (range01) on each row 
 range01 <- function(x){(x-min(x, na.rm = TRUE))/(max(x, na.rm = TRUE)-min(x, na.rm = TRUE))}
 
+# now running min max normalization function for tpm adn atac counts
 combined_expr_peak <- combined_expr_peak %>%
   group_by(gene_name) %>%
   mutate(rel_tpm = range01(tpm),
@@ -412,6 +433,7 @@ combined_expr_peak <- combined_expr_peak %>%
          scaled_tpm = scale(tpm),
          scaled_atac = scale(atac_peak_count))
 
+# plotting expression and atac values across time for each gene
 ggplot(combined_expr_peak, aes(x = timepoint, y = rel_tpm)) +
   geom_point(color = "#a8404c") +
   geom_line(color = "#a8404c") +
@@ -421,24 +443,31 @@ ggplot(combined_expr_peak, aes(x = timepoint, y = rel_tpm)) +
               color = "#424242") +
   facet_wrap(~gene_name)
 
-# What does it look like if we take the mean of the relative signal per timepoint?
-hmm <- combined_expr_peak %>%
-  filter(timepoint <= 150) %>%
-  group_by(gene_name) %>%
-    mutate(rel_tpm = range01(tpm),
-         rel_atac = range01(atac_peak_count)) %>%
-  group_by(timepoint) %>%
-  mutate(rel_tpm = sum(rel_tpm),
-         rel_atac = sum(rel_atac)) %>%
-  ungroup() %>%
-    mutate(rel_tpm = range01(rel_tpm),
-         rel_atac = range01(rel_atac)) 
-ggplot(hmm, aes(x = timepoint, y = rel_atac)) +
-  geom_point(color = "red") +
-  geom_smooth(method = "loess", se = F, span = 1.1, color = "red") +
-  geom_point(aes(y = rel_tpm), color = "black") +
-  geom_smooth(aes(y = rel_tpm), color = "black", se = F, span = 1.1)
+# Here you normalizing each time point then summing
 
+# What does it look like if we take the mean of the relative signal per timepoint?
+# atac_expression_combined <- combined_expr_peak %>%
+#   filter(timepoint <= 150) %>%
+#   group_by(gene_name) %>%
+#     mutate(rel_tpm = range01(tpm),
+#          rel_atac = range01(atac_peak_count)) %>%
+#   group_by(timepoint) %>%
+#   mutate(rel_tpm = sum(rel_tpm),
+#          rel_atac = sum(rel_atac)) %>%
+#   ungroup() %>%
+#     mutate(rel_tpm = range01(rel_tpm),
+#          rel_atac = range01(rel_atac)) 
+# 
+# # Plotting
+# ggplot(hmm, aes(x = timepoint, y = rel_atac)) +
+#   geom_point(color = "red") +
+#   geom_smooth(method = "loess", se = F, span = 1.1, color = "red") +
+#   geom_point(aes(y = rel_tpm), color = "black") +
+#   geom_smooth(aes(y = rel_tpm), color = "black", se = F, span = 1.1)
+
+
+# Now we are summing tpm of all genes at each timepoint 
+# removing firre 
 meta_expr_peak <- combined_expr_peak %>%
   filter(gene_name != "Firre", timepoint <= 150) %>%
   group_by(timepoint) %>%
@@ -447,6 +476,7 @@ meta_expr_peak <- combined_expr_peak %>%
   mutate(rel_tpm = range01(tpm),
          rel_atac = range01(atac))
 
+# making a col of atac/rna and another col of atac_values/rna_values
 meta_expr_peak_l <- meta_expr_peak %>%
   dplyr::select(timepoint, rel_tpm, rel_atac) %>%
   pivot_longer(2:3, names_to = "signal_type", values_to = "rel_signal") %>%
@@ -455,6 +485,7 @@ meta_expr_peak_l <- meta_expr_peak %>%
   filter(!is.na(rel_signal))
 
 
+# making a new col weight where 0 and 150 will be strong penalized if lowess is far off
 meta_expr_peak_l <- meta_expr_peak_l %>%
   mutate(weight = ifelse(timepoint %in% c(0,150), 100, 1))
 
@@ -471,6 +502,8 @@ midpoint <- atac_half_max + (expr_half_max - atac_half_max)/2
 offset <- expr_half_max - atac_half_max
 
 meta_expr_peak_l$signal_type <- factor(meta_expr_peak_l$signal_type, levels = c("expr", "atac"))
+
+# plotting time dynamics
 ggplot(meta_expr_peak_l, aes(y = timepoint, x = rel_signal, color = signal_type)) +
   geom_point() +
   geom_smooth(method = "loess", se = FALSE, span = 1.1, aes(weight = c(100,100,1,1,1,1,1,1,1,1,100,100))) +
@@ -482,10 +515,12 @@ ggplot(meta_expr_peak_l, aes(y = timepoint, x = rel_signal, color = signal_type)
   coord_flip() +
   scale_y_continuous(breaks = c(0,atac_half_max, expr_half_max, 150), labels = c(0, round(atac_half_max,1), round(expr_half_max, 1), 150)) +
   guides(color = FALSE)
+
+# saving
 ggsave("figures/meta_atac_vs_expression_timing.pdf", height = 2, width = 2)
 
 
-
+#TODO 
 expr_peak_l <- combined_expr_peak %>%
   dplyr::select(timepoint, gene_name, rel_tpm, rel_atac) %>%
   pivot_longer(3:4, names_to = "signal_type", values_to = "rel_signal") %>%
