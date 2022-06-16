@@ -237,13 +237,13 @@ combined_long_vszero_sig <- combined_long_vszero_sig %>%
   filter(max_fc > l2fc_thresh)
 
 # saving results
-save(combined_long_vszero_sig, file = "results/combined_longt_vszero_sig.RData")
+save(combined_long_vszero_sig, file = "results/combined_long_vszero_sig.RData")
 ```
 
 # Plotting combined sig (dox controlled) genes with "make_timecourse_lfc_plot function
 ```{r plotting WT KO combined short sig dox controlled}
 
-load("results/combined_longt_vszero_sig.RData", verbose = T)
+load("results/combined_long_vszero_sig.RData", verbose = T)
 
 # changing lfc col name
 combined_long_vszero_sig <- combined_long_vszero_sig %>%
@@ -272,11 +272,33 @@ ggsave(paste0("figures/combined_long_lfc_", thresh, ".pdf"),
 
 #TODO start here
 #TODO check sig gene numbers
+
+rescued_gene_ids_20 <- read.csv("../04_Firre_ko_long_time_course/results/rescued_sig_20.txt")
+
+combined_long_sig_genes <- unique(combined_long_vszero_sig$gene_id) 
+
+test <- rescued_gene_ids_20 %in% combined_long_sig_genes
+
+rescued_gene_ids_20 <- rescued_gene_ids_20[rescued_gene_ids_20 %in% combined_long_sig_genes]
+rownames_to_column(rescued_gene_ids_20)
+
+
 combined_sig_genes <- unique(short_vszero_sig$gene_id)
 # overlapping %in% combined_sig_genes and rescued 20% WT KO levels 
-rescued_gene_ids_20[rescued_gene_ids_20 %in% combined_sig_genes]
+rescued_ids_20[rescued_ids_20 %in% combined_sig_genes$gene_id]
+
+
+
+
+
+combined_long_sig_genes <- unique(combined_long_vszero_sig$gene_id)
+# overlapping %in% combined_sig_genes and rescued 20% WT KO levels 
+
+
+
+
 ```
-### Result: only rescued gene in combined short dox controlled is Firre (ENSMUSG00000085396.7)
+### Result: 6 Genes are rescued in long time course ....
 
 
 # Plotting each of the 30 combined short dox controlled sig genes across all timepoints 
