@@ -272,38 +272,90 @@ ggsave(paste0("figures/combined_long_lfc_", thresh, ".pdf"),
 
 #TODO start here
 #TODO check sig gene numbers
+#TODO why can just load in 
+# rescued_gene_ids_20 <- read.csv("../04_Firre_ko_long_time_course/results/rescued_sig_20.txt", col.names = "gene_id") 
+# Then left joing with sig genes or %in%
+#TODO Firre is not in combined_long_vszero_sig!! How is that possible
+#TODO also not in combined_long_dox list? Variance differences?
 
-rescued_gene_ids_20 <- read.csv("../04_Firre_ko_long_time_course/results/rescued_sig_20.txt")
-
+# loading in long combined sig genes
 combined_long_sig_genes <- unique(combined_long_vszero_sig$gene_id) 
 
-test <- rescued_gene_ids_20 %in% combined_long_sig_genes
+# We need the KO vs WT data
+load("../03_firre_ko_vs_wt/results/wtko.RData")
 
-rescued_gene_ids_20 <- rescued_gene_ids_20[rescued_gene_ids_20 %in% combined_long_sig_genes]
-rownames_to_column(rescued_gene_ids_20)
+# Getting sig wt vs ko genes
+wtko_res_shrnklfc <- wtko_res_shrnklfc %>%
+  mutate(sig = padj <= pval_thresh & abs(log2FoldChange) > l2fc_thresh)
+
+# filtering to sig genes
+wtko_sig <- wtko_res_shrnklfc %>% 
+  filter(sig == TRUE)
+
+# IMPORTANT: we did not do a lfc threshold.
+# So this means any gene that was sig in long time course that overlaps with wt vs ko
+# 1,770 genes in long time course (with out fold change cut off )
+rescued_genes <- wtko_sig$gene_id[wtko_sig$gene_id %in% 
+                                    (combined_long_shrnklfc %>%
+                                       filter(padj <= pval_thresh) %>% 
+                                       pull(gene_id))]
+# 64 overlaps of possible rescue genes
+
+# From here on we are making objects that can be used generically with different 
+# inputs above to create "rescued_genes"
+
+# filtering to PVal and lfc thresholds 
+rescue_wtko <- wtko_sig %>%
+  filter(gene_id %in% rescued_genes) %>%
+  dplyr::select(gene_id, gene_name, log2FoldChange) %>%
+  dplyr::rename(l2fc_wtko = log2FoldChange)
+# still at 64 genes in this object
+
+# sig combined long time course genes and timepoint 
+rescue_ltc <- combined_long_shrnklfc %>%
+  filter(gene_id %in% rescued_genes) %>%
+  dplyr::select(gene_id, gene_name, log2FoldChange, timepoint) %>%
+  dplyr::rename(l2fc_ltc = log2FoldChange)
+
+# merging wt vs ko sig and ko long time course sig genes
+# There are 640 genes differentially expressed in long time course
+rescued_df <- rescue_wtko %>%
+  left_join(rescue_ltc)
+
+# making a dist col to find distance of values in wt -vs ko and long Ko time course sig genes
+rescued_df <- rescued_df %>%
+  mutate(dist = abs((l2fc_wtko * -1) - l2fc_ltc))
 
 
-combined_sig_genes <- unique(short_vszero_sig$gene_id)
-# overlapping %in% combined_sig_genes and rescued 20% WT KO levels 
-rescued_ids_20[rescued_ids_20 %in% combined_sig_genes$gene_id]
+# genes that are recriprocally regulated
+# first finding overlap between wt vs ko and long time course 
+rescued_df_closest <- rescued_df %>%
+  group_by(gene_id, gene_name) %>%
+  mutate(closest = min(dist) == dist,
+         max_fc = max(abs(l2fc_ltc)) == abs(l2fc_ltc)) %>%
+  filter(closest == TRUE)
 
+# Genes that overlap in long time course wt vs ko and 20% of wild type value is restored
+rescued_df_closest <-  rescued_df_closest %>%
+  mutate(twenty_percent = l2fc_wtko * 0.2,
+         rescued = (-1*l2fc_wtko - twenty_percent)>= l2fc_ltc & l2fc_ltc>= (-1*l2fc_wtko + twenty_percent) |
+           (-1*l2fc_wtko + twenty_percent)>= l2fc_ltc & l2fc_ltc>= (-1*l2fc_wtko - twenty_percent))
 
-
-
-
-combined_long_sig_genes <- unique(combined_long_vszero_sig$gene_id)
-# overlapping %in% combined_sig_genes and rescued 20% WT KO levels 
-
-
+# Genes that overlap in long time course wt vs ko and 20% of wild type value is restored
+combined_long_rescued_genes_20 <- rescued_df_closest %>% 
+  filter(rescued == TRUE) %>% 
+  pull(gene_name)
 
 
 ```
-### Result: 6 Genes are rescued in long time course ....
+### Result: Firre is not in this list -- suspicious and only gene is Tfap2a
+
 
 
 # Plotting each of the 30 combined short dox controlled sig genes across all timepoints 
 ```{r 0 combined sig genes across all timepoints }
 
+#TODO start here
 # Loading in results 
 load("results/combined_short_vszero_sig.RData", verbose = T)
 load("results/combined_vs_zero_all_time_points.RData", verbose = T)

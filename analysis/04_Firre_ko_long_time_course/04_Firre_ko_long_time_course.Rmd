@@ -193,10 +193,10 @@ rescued_genes <- wtko_sig$gene_id[wtko_sig$gene_id %in%
                                        pull(gene_id))]
 
 
-hmmm <- ko_rescue_long_shrnklfc %>%
-    filter(padj <= pval_thresh) %>% 
-                  pull(gene_id) %>%
-unique()
+# hmmm <- ko_rescue_long_shrnklfc %>%
+#     filter(padj <= pval_thresh) %>% 
+#                   pull(gene_id) %>%
+# unique()
 
 # filtereing and retreiving more informaton about rescued genes
 # the lfc in wt vs ko and gene name and gene id
