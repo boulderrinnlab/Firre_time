@@ -441,7 +441,7 @@ length(ko_rescue_1) - length(individual_overlaps_12)
 length(wt_overexp_2) - length(individual_overlaps_12)
 
 all_overlaps_123 <- intersect(individual_overlaps_12, combined_3)
-
+length(all_overlaps_123)
 
 # This might be useful so writting out:
 all_overlaps_123_df <- all_overlaps_123 %>% as.data.frame()
@@ -455,7 +455,7 @@ library(VennDiagram)
 # Plotting ven diagram
 draw.triple.venn(area1 = length(ko_rescue_1), 
                  area2 = length(wt_overexp_2), 
-                 area3 = length(short_3),
+                 area3 = length(combined_3),
                  n12 = length(individual_overlaps_12),
                  n23 = length(ov_23), 
                  n13 = length(ov_13),
@@ -469,11 +469,11 @@ mat <- cbind(
   B = sample(c(TRUE, FALSE), 50, TRUE),
   C = sample(c(TRUE, FALSE, FALSE, FALSE), 50, TRUE)
 )
-all_genes <- unique(c(ko_rescue_1, wt_overexp_2, short_3))
+all_genes <- unique(c(ko_rescue_1, wt_overexp_2, combined_3))
 ov_mat <- cbind(
   rescue = all_genes %in% ko_rescue_1,
   overexpr = all_genes %in% wt_overexp_2,
-  combined = all_genes %in% short_3
+  combined = all_genes %in% combined_3
 )
 fit2 <- euler(ov_mat)
 
@@ -486,7 +486,7 @@ dev.off()
 
 
 
-# Short timecourse Firre responders heatmap for combined WT KO and dox controlled
+# Short timecourse Firre responders heatmap for genes sig in all three long time courses 
 
 ```{r fig.width=4, fig.height=4 Firre responders heatmap for combined WT KO and dox controlled}
 
@@ -494,22 +494,27 @@ dev.off()
 load("../05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData", verbose = T)
 load("../07_wt_short_time_course/results/wt_overexp_short_vszero_sig.RData", verbose = T)
 
+#TODO how to make this from the intersection of these three variables ...
+ko_rescue_1 <- unique(ko_rescue_long_vszero_sig$gene_name) 
+wt_overexp_2 <- unique(wt_overexp_long_vszero_sig$gene_id) 
+combined_3 <- unique(combined_long_vszero_sig$gene_id)
+
 # finding overlaps
-overlapping_genes <- unique(ko_rescue_short_vszero_sig$gene_id)[unique(ko_rescue_short_vszero_sig$gene_id) %in% unique(wt_overexp_short_vszero_sig$gene_id)]
+overlapping_genes <- unique(combined_long_vszero_sig$gene_id)[unique(wt_overexp_long_vszero_sig$gene_id) %in% unique(ko_rescue_long_vszero_sig$gene_id)]
 
 # Heatmap of fold-changes for DEGs in the rescue
 # Check that there are no duplicate row names.
-stopifnot(all(length(unique(short_vszero_sig$gene_id)) == length(unique(short_vszero_sig$gene_name))))
+stopifnot(all(length(unique(combined_long_vszero_sig$gene_id)) == length(unique(combined_long_vszero_sig$gene_name))))
 
 # converting to matrix for heatmap
-short_lfc <- short_vszero_sig %>%
+combined_lfc <- combined_long_vszero_sig %>%
   dplyr::select(gene_name, timepoint, log2FoldChange) %>%
   pivot_wider(names_from = timepoint, names_sort = TRUE, values_from = log2FoldChange) %>%
   column_to_rownames("gene_name") %>%
   as.matrix()
 
 # getting order right
-ordering <- short_vszero_sig %>%
+ordering <- combined_long_vszero_sig %>%
   filter(abs(log2FoldChange) > 0.2) %>%
   group_by(gene_name) %>%
   summarize(first_tp_de = min(timepoint),
@@ -518,13 +523,13 @@ ordering <- short_vszero_sig %>%
           -max_fc)
 
 # Add a zero column.
-short_lfc <- cbind(matrix(0, nrow = nrow(short_lfc), ncol = 1), short_lfc)
-colnames(short_lfc)[[1]] <- "0"
+combined_lfc <- cbind(matrix(0, nrow = nrow(combined_lfc), ncol = 1), combined_lfc)
+colnames(combined_lfc)[[1]] <- "0"
 
-short_lfc <- short_lfc[ordering$gene_name,]
+combined_lfc <- combined_lfc[ordering$gene_name,]
 
 pdf(paste0("figures/combined_responders_heatmap_", thresh, ".pdf"), 
-    width = 4, height = 3.5)
+    width = 4, height = 30)
 ht1 <- Heatmap(short_lfc, 
                name = "l2fc",
                cluster_columns = FALSE, show_row_names = TRUE, 
@@ -533,4 +538,7 @@ ht1 <- Heatmap(short_lfc,
 draw(ht1)
 dev.off()
 draw(ht1)
+
+#TODO does this look right?
 ```
+### Result: interesting Peg10 VLP is induced a lot by Firre in longer time course
