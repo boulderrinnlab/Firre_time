@@ -201,10 +201,10 @@ stopifnot(all(rownames(combined_long_all_timepoints_vszero_counts) == genes$gene
   }) %>% bind_rows()
   
   # saving 
-  save(combined_long_all_timepoints_vszero_shrnklfc, file = "results/combined_vs_zero_all_time_points.RData")
+  save(combined_long_all_timepoints_vszero_shrnklfc, file = "results/combined_long_vs_zero_all_time_points.RData")
 }
 
-load("results/combined_vs_zero_all_time_points.RData", verbose = T)
+load("results/combined_long_vs_zero_all_time_points.RData", verbose = T)
 ```
 
 # Creating list of combined WT and KO long timecourse sig genes
@@ -352,21 +352,25 @@ combined_long_rescued_genes_20 <- rescued_df_closest %>%
 
 
 
-# Plotting each of the 30 combined short dox controlled sig genes across all timepoints 
+# Plotting each of the combined long dox controlled sig genes across all timepoints 
 ```{r 0 combined sig genes across all timepoints }
 
 #TODO start here
 # Loading in results 
-load("results/combined_short_vszero_sig.RData", verbose = T)
-load("results/combined_vs_zero_all_time_points.RData", verbose = T)
+load("results/combined_long_vszero_sig.RData", verbose = T)
+load("results/combined_long_vs_zero_all_time_points.RData", verbose = T)
 
 
-sig_combined_vs_zero <- combined_vszero_shrnklfc %>% filter(gene_id %in% unique(short_vszero_sig$gene_id))
-deseq_res <- sig_combined_vs_zero
-genes_to_include <- unique(sig_combined_vs_zero$gene_id)
+
+sig_long_combined_vs_zero <- combined_long_vszero_shrnklfc %>% filter(gene_id %in% unique(combined_long_vszero_sig$gene_id))
+
+#TODO this isn't loaded anywhere per the strategy of create and load etc...
+# deseq_res <- sig_combined_vs_zero
+
+genes_to_include <- unique(combined_long_vszero_sig$gene_id)
 
 # Let's plot the downregulated genes separately
- deg <- deseq_res %>%
+ deg <- combined_long_vszero_sig %>%
     filter(gene_id %in% genes_to_include) %>%
     dplyr::select(gene_id, gene_name, baseMean, log2FoldChange, timepoint)
   
@@ -409,23 +413,22 @@ genes_to_include <- unique(sig_combined_vs_zero$gene_id)
 
   # Saving
 ggsave("figures/short_and_long_individual_fc_profiles.pdf",
-       height = 4.5, width = 6.5)
+       height = 49, width = 49)
 ```
 
-# Determining overlap of genes in short time course of WT and KO sepeately 
+# Determining overlap of genes in long time course of WT and KO sepeately 
 ```{r overlap in short time course for WT and KO seperate} 
 
 # Loading in the WT and KO short time courses vszero datasets 
-load("results/combined_short_vszero_sig.RData", verbose = T)
+load("results/combined_long_vszero_sig.RData", verbose = T)
+load("../06_WT_long_time_course/results/wt_overexp_long_vszero_sig.RData", verbose = T)
+load("../04_Firre_ko_long_time_course/results/ko_rescue_long_vszero_sig.RData", verbose = T)
 
-load("/scratch/Shares/rinn/JR/Firre_time/analysis/07_wt_short_time_course/results/wt_overexp_short_vszero_sig.RData", verbose = T)
-
-load("/scratch/Shares/rinn/JR/Firre_time/analysis/05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData")
 
 # making a unique list of each backgrounds sig genes
-ko_rescue_1 <- unique(ko_rescue_short_vszero_sig$gene_name)
-wt_overexp_2 <- unique(wt_overexp_short_vszero_sig$gene_name)
-short_3 <- unique(short_vszero_sig$gene_name)
+ko_rescue_1 <- unique(ko_rescue_long_vszero_sig$gene_name) 
+wt_overexp_2 <- unique(wt_overexp_long_vszero_sig$gene_name) 
+combined_3 <- unique(combined_long_vszero_sig$gene_name)
 
 # finding overlap
 individual_overlaps_12 <- intersect(ko_rescue_1, wt_overexp_2)
@@ -437,9 +440,16 @@ length(individual_overlaps_12)
 length(ko_rescue_1) - length(individual_overlaps_12)
 length(wt_overexp_2) - length(individual_overlaps_12)
 
-all_overlaps_123 <- intersect(individual_overlaps_12, short_3)
-ov_23 <- intersect(wt_overexp_2, short_3)
-ov_13 <- intersect(ko_rescue_1, short_3)
+all_overlaps_123 <- intersect(individual_overlaps_12, combined_3)
+
+
+# This might be useful so writting out:
+all_overlaps_123_df <- all_overlaps_123 %>% as.data.frame()
+write_csv2(all_overlaps_123_df, "results/sig_overlaps-KO-long_wt_long_combined-long.csv")
+
+# finding other overlaps for venn
+ov_23 <- intersect(wt_overexp_2, combined_3)
+ov_13 <- intersect(ko_rescue_1, combined_3)
 library(VennDiagram)
 
 # Plotting ven diagram
@@ -452,7 +462,7 @@ draw.triple.venn(area1 = length(ko_rescue_1),
                  n123 = length(all_overlaps_123))
 
 library(eulerr)
-
+# TODO what the heck !
 set.seed(1)
 mat <- cbind(
   A = sample(c(TRUE, TRUE, FALSE), 50, TRUE),
@@ -472,7 +482,7 @@ pdf("figures/short_timecourse_overlap_venn.pdf")
 plot(fit2, quantities = TRUE)
 dev.off()
 ```
-### Result: strong overlap of firre targets independent of geneotype or anyalysis 
+### Result: 17 genes overlap in all timecourses 
 
 
 
