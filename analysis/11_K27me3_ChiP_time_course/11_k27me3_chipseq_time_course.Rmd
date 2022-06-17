@@ -9,23 +9,32 @@ editor_options:
 options(stringsAsFactors = T)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
-source("../util/_plot_theme.R")
+library(Rsubread)
+source("../../util/_plot_theme.R")
+# source ~/anaconda3/etc/profile.d/conda.sh
+library(ChIPseqSpikeInFree)
+
+
+#TODO what are these
 Sys.setenv(PATH = "/opt/gcc/7.2.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/usr/lib/rstudio-server/bin/postback")
 Sys.setenv(LD_LIBRARY_PATH = "/opt/gcc/7.2.0/bin:/usr/lib64/R/lib::/lib:/usr/lib/jvm/jre/lib/amd64/server:/usr/lib/jvm/jre/lib/amd64:/usr/lib/jvm/java/lib/amd64:/usr/java/packages/lib/amd64:/lib:/usr/lib")
 Sys.setenv(LD_LIBRARY_PATH = "/usr/local/lib:/usr/lib:/usr/local/lib64:/usr/lib64")
 Sys.getenv("PATH")
 Sys.getenv("LD_LIBRARY_PATH")
+#TODO what is this doesn't install well
 install.packages("xgboost")
 system("gcc --version")
 system('export CXXFLAGS="$CXXFLAGS -fPIC"')
 system('export R_LIBS="~/R/lib"')
-# source ~/anaconda3/etc/profile.d/conda.sh
-library(ChIPseqSpikeInFree)
+
 ```
 
 ### Call peaks on the merged dataset
 
+#TODO what is going on here ... running macs?
 ```{bash}
+
+
 # Combine all data and call peaks on everything combined.
 #!/bin/bash
 #SBATCH -p short
@@ -65,9 +74,9 @@ date
 ```
 
 
-
+# Importing ChIPseq peak files from MACS run NF_CORE chipseq pipeline
 ```{r}
-library(Rsubread)
+
 # Create an SAF file
 merged_peaks <- rtracklayer::import("macs/FIRRE_H3K27me3_chipseq_combined_peaks.broadPeak")
 merged_peaks_df <- merged_peaks %>% as.data.frame()
