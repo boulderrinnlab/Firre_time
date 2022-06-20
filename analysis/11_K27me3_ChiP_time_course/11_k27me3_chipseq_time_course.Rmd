@@ -89,7 +89,6 @@ merged_peaks_df <- merged_peaks %>% as.data.frame()
 #TODO what is this doing 
 merged_peaks_df %>% filter(seqnames == "chr2", end == 122348081)
 min(merged_peaks_df$qValue)
-10^-1.02
 
 #TODO only testing chr2 ?
 merged_peaks_saf <- merged_peaks_df %>%
@@ -152,9 +151,13 @@ count_matrix <- counts$counts
 # reading in sample sheet
 samples <- read.csv("data/h3k27me3_firre_samplesheet.csv")
 
-#TODO start here samples aren't alinign with Bam data
+# changing row names to match
+rownames(samples) <- samples$sample_id
+
 # checking everything is in order
-stopifnot(all(colnames(count_matrix) == samples$bam_file))
+stopifnot(all(colnames(count_matrix) == samples$sample_id))
+
+# changing col names
 colnames(count_matrix) <- samples$sample_id
 
 
@@ -180,21 +183,27 @@ ip_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 ip_counts <- count_matrix[,ip_samples$sample_id]
 ```
 
-
+# Running Deseq on comparisons of induced firre versus control for each time point
+# Determining how many peaks are significant between induced and control lines
 ```{r Running Deseq on condition of peaks based on Firre induction}
 
-
+# setting up experiment matrix
 dds <- DESeqDataSetFromMatrix(countData = ip_counts,
                               colData = ip_samples,
                               design = ~ firre_itg)
 dds <- DESeq(dds)
+# checking results
 resultsNames(dds)
+# removing intercept results by using "results" function to "grep" firre_itg ...
 res <- results(dds, name = "firre_itg_ITG_vs_CTL")
 
+# turning into data frame
 res_df <- res %>% as.data.frame()
 
+# filtering to only peaks that are sig differnet of P < 0.05
 sig <- res_df %>% filter(padj < 0.05)
 
+# plotting
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
