@@ -10,6 +10,7 @@ options(stringsAsFactors = T)
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(Rsubread)
+library(DESeq2)
 source("../../util/_plot_theme.R")
 # source ~/anaconda3/etc/profile.d/conda.sh
 library(ChIPseqSpikeInFree)
@@ -28,8 +29,10 @@ system('export CXXFLAGS="$CXXFLAGS -fPIC"')
 system('export R_LIBS="~/R/lib"')
 
 ```
+# We performed K27me3 Chipseq at 48 hours after Firre induction in WT and KO lines and controls
+# We wanted to see if K27me3 was lost or gained globally upon induction of Firre
+# some evidence suggests that lack of Firre would result in decreased K27me3, thus induction would increase k37me3
 
-### Call peaks on the merged dataset
 
 #TODO what is going on here ... running macs?
 ```{bash}
@@ -75,15 +78,20 @@ date
 
 
 # Importing ChIPseq peak files from MACS run NF_CORE chipseq pipeline
-```{r}
+# Running feature counts over peaks for Deseq input values
+
+```{r importing chip seq files and quantitating with Feature counts}
 
 # Create an SAF file
 merged_peaks <- rtracklayer::import("macs/FIRRE_H3K27me3_chipseq_combined_peaks.broadPeak")
 merged_peaks_df <- merged_peaks %>% as.data.frame()
 
+#TODO what is this doing 
 merged_peaks_df %>% filter(seqnames == "chr2", end == 122348081)
 min(merged_peaks_df$qValue)
 10^-1.02
+
+#TODO only testing chr2 ?
 merged_peaks_saf <- merged_peaks_df %>%
   dplyr::select(name,seqnames, start, end, strand) %>%
   dplyr::rename(GeneID = name,
@@ -94,18 +102,28 @@ merged_peaks_saf <- merged_peaks_df %>%
 
 write.table(merged_peaks_saf, "data/merged_peaks.saf", quote = F, row.names = F, sep = "\t")
 
+#TODO more stable file path
 bam_files <- list.files("/scratch/Shares/rinn/JR/FIRRE_KO_TG_K27me3_CHIPSEQ/results_all_individual_runs/bwa/mergedLibrary/", pattern = ".bam$", full.names = T)
-library(Rsubread)
-library(tidyverse)
+
+# using feature counts to quantitate K27me3 peaks in Firre induced and control lines
 counts <- featureCounts(bam_files, 
                         annot.ext = "data/merged_peaks.saf", 
                         isPairedEnd = TRUE, nthreads = 16)
+
+# Saving counts object for future analyses
 write_rds(counts, "results/merged_peak_counts.rds")
+# test read in of .rds
 counts <- read_rds("results/merged_peak_counts.rds")
+
+# checking length of peaks with counts
 nrow(counts$counts)
+# 102,957 peaks in merged data set
 ```
 
+# Not sure Chipr 
 ```{r}
+
+#TODO not sure what this all is ChiPr peaks?
 # chipr_peaks <- read.table("data/chipr/h3k27me3_ip_chipr_optimal.bed") 
 # names(chipr_peaks) <- c("chr",	"start", "end", "name", "score", "strand", "signalValue", "pval", "qval")
 # 
@@ -125,32 +143,46 @@ nrow(counts$counts)
 # chipr_counts <- read_rds("results/chipr_peak_counts.rds")
 ```
 
+# Creating smaples sheet matrix for Deseq
+```{r Creating experimental matrix for Deseq of Firre induced vs cntrl K27me3 ChipSeq}
 
-```{r}
-
-
+# reading in counts for each peaks as matrix
 count_matrix <- counts$counts
+
+# reading in sample sheet
 samples <- read.csv("data/h3k27me3_firre_samplesheet.csv")
+
+#TODO start here samples aren't alinign with Bam data
+# checking everything is in order
 stopifnot(all(colnames(count_matrix) == samples$bam_file))
 colnames(count_matrix) <- samples$sample_id
 
+
+#TODO delete?
 # Subset the count matrix to just the peaks in CHIPR optimal peaks
 # chipr_merged_peaks <- subsetByOverlaps(merged_peaks, chipr_peaks_gr)
 # chipr_merged_peaks_df <- chipr_merged_peaks %>% as.data.frame()
 # count_matrix <- count_matrix[chipr_merged_peaks_df$name,]
 
 
+# merging in needed data to samples for Deseq
 samples <- samples %>% unite(itg_timepoint, firre_itg, timepoint, remove = FALSE)
 
+#TODO
+# setting samples to control?
 samples$condition <- "control"
+
+# setting inducd col values 
 samples[samples$itg_timepoint == "ITG_48", "condition"] <- "induced"
+
 # Transgene induced
 ip_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 ip_counts <- count_matrix[,ip_samples$sample_id]
+```
 
 
+```{r Running Deseq on condition of peaks based on Firre induction}
 
-library(DESeq2)
 
 dds <- DESeqDataSetFromMatrix(countData = ip_counts,
                               colData = ip_samples,
@@ -165,6 +197,10 @@ sig <- res_df %>% filter(padj < 0.05)
 
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+```
+
+
+```{r}
 ```
 
 ```{r}
