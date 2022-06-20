@@ -203,110 +203,184 @@ res_df <- res %>% as.data.frame()
 # filtering to only peaks that are sig differnet of P < 0.05
 sig <- res_df %>% filter(padj < 0.05)
 
-# plotting
+#TODO why -log10 space?
+# plotting mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# Plotting pval vs fold change
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result: no significant peaks were found (P ~ .17 for the most sig)
 
 
-```{r}
-```
+# Now testing each geneotype for sig peak differentces
+```{r comparing WT control versus firre induced for sig peaks via Deseq}
 
-```{r}
+# selecting just wt_ip samples and then indexing to get counts
 wt_ip_samples <- samples %>% filter(firre_ko == "WT", h3k27me3 == "IP")
 wt_ip_counts <- count_matrix[,wt_ip_samples$sample_id]
 
+
+# Setting up Deseq design on 
 dds <- DESeqDataSetFromMatrix(countData = wt_ip_counts,
                               colData = wt_ip_samples,
-                              design = ~ condition)
+                            design = ~ condition)
+
+# running Deseq
 dds <- DESeq(dds)
+
+# checking results and filtering
 resultsNames(dds)
 res <- results(dds, name = "condition_induced_vs_control")
+
+# creating a data frame of sig peaks
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# Ploitting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result no significant peaks found in WT induced versus 
 
-```{r}
+
+# Testing KO cntrol vs induced by Deseq for sig peaks
+```{r Sig peaks between KO cntrl and induced}
+
+# Filtering to just KO samples and then indexing to get counts for peaks
 ko_ip_samples <- samples %>% filter(firre_ko == "KO", h3k27me3 == "IP")
 ko_ip_counts <- count_matrix[,ko_ip_samples$sample_id]
 
+# setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = ko_ip_counts,
                               colData = ko_ip_samples,
-                              design = ~ condition)
+                             design = ~ condition)
+
+# Running Deseq
 dds <- DESeq(dds)
+
+# getting names and filtering to sig
 resultsNames(dds)
 res <- results(dds, name = "condition_induced_vs_control")
+
+# sig peaks dataframe
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result no sig peaks
 
-```{r}
-# 48 itg vs 0 itg
+# Sig peaks between 0 and 48 hours
+```{r Deseq on timepoint of 0 vs 48 hours with both KO and WT mixed}
+
+# 48 itg vs 0 itg filtering and getting counts
 itg_ip_samples <- samples %>% filter(h3k27me3 == "IP", firre_itg == "ITG")
 itg_ip_counts <- count_matrix[,itg_ip_samples$sample_id]
 itg_ip_samples$timepoint <- factor(itg_ip_samples$timepoint, c("0", "48"))
 
+# setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = itg_ip_counts,
                               colData = itg_ip_samples,
                               design = ~ timepoint)
+
+# running Deseq
 dds <- DESeq(dds)
+
+# getting results and filtering to sig diff peaks
 resultsNames(dds)
 res <- results(dds, name = "timepoint_48_vs_0")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result: no sig peaks between time points
 
 
-
-```{r}
+# Comparing control lines for sig peaks. 
+```{r comparing control lines WT and KO between 0 and 48 hours}
 # 48 ctl vs 0 ctl
 
+# filtering to samples and indexing to get counts for peaks
 ctl_ip_samples <- samples %>% filter(h3k27me3 == "IP", firre_itg == "CTL")
 ctl_ip_counts <- count_matrix[,ctl_ip_samples$sample_id]
 ctl_ip_samples$timepoint <- factor(ctl_ip_samples$timepoint, c("0", "48"))
 
+# setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = ctl_ip_counts,
                               colData = ctl_ip_samples,
-                              design = ~ timepoint)
+                             design = ~ timepoint)
+
+# Running
 dds <- DESeq(dds)
+
+# filtering results and to sig peaks
 resultsNames(dds)
 res <- results(dds, name = "timepoint_48_vs_0")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+
 ```
+### Result: No sig peaks
 
 
+# Taking only the control samples and IP = WT vs KO for all control samples and thus just WT vs KO (more replicates this way)
+```{r Control samples only WT -vs- KO sig peaks}
 
-```{r}
+# filtering samples and indexing to get counts
 zero_samples <- samples %>% filter(h3k27me3 == "IP", condition == "control")
 zero_counts <- count_matrix[,zero_samples$sample_id]
 
+# setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = zero_counts,
                               colData = zero_samples,
-                              design = ~ firre_ko)
+                             design = ~ firre_ko)
+
+# running 
 dds <- DESeq(dds)
+
+# filtering results and getting sig peaks
 resultsNames(dds)
 res <- results(dds, name = "firre_ko_WT_vs_KO")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
 
-
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+
+
+# Some sig peaks finally :) 
+# TODO make a df of these peaks
+sig_threshold <- sig[filter(sig$log2FoldChange >= 1)]
+
+sig_threshold <- filter(sig[sig$log2FoldChange] >= -1)
+
+sig_threshold <- filter(sig$log2FoldChange <= -1)
 ```
+
+
+
 
 ```{r}
 fortyeight_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
