@@ -43,3 +43,6 @@ work/*
 *.gtf
 *fa
 *.bed
+*.broadPeak
+*.gappedPeak
+*.xls
