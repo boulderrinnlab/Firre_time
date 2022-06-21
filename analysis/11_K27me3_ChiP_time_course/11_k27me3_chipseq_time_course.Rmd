@@ -340,8 +340,9 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
 ### Result: No sig peaks
 
+# *** ALL WT vs KO at 0 timepoint : HAS PEAKS worth looking into! ***
+# Taking only the control samples and IP = WT vs KO for all control samples and thus just WT vs KO 
 
-# Taking only the control samples and IP = WT vs KO for all control samples and thus just WT vs KO (more replicates this way)
 ```{r Control samples only WT -vs- KO sig peaks}
 
 # filtering samples and indexing to get counts
@@ -353,6 +354,9 @@ dds <- DESeqDataSetFromMatrix(countData = zero_counts,
                               colData = zero_samples,
                              design = ~ firre_ko)
 
+#TODO I am guessing the plot has more - values because KO has less K27me3
+#TODO investigate bigWig
+
 # running 
 dds <- DESeq(dds)
 
@@ -361,6 +365,14 @@ resultsNames(dds)
 res <- results(dds, name = "firre_ko_WT_vs_KO")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
+
+
+# TODO what am I missing :()
+# THere are some sig peaks (spoiler) so filter to 2 fold change (2 to -2)
+res <- results(dds, name = "firre_ko_WT_vs_KO")
+res_df <- res %>% as.data.frame() %>%
+
+sig <- res_df %>% filter(padj < 0.05 & abs(log2FoldChange > 1)) 
 
 
 # Plotting base mean vs fold change
@@ -378,11 +390,18 @@ sig_threshold <- filter(sig[sig$log2FoldChange] >= -1)
 
 sig_threshold <- filter(sig$log2FoldChange <= -1)
 ```
+### Result: there are some significant peaks between WT and KO worth looking at more !
+### Result: the fold changes are not that big -- look at "sig" peaks in raw data
 
 
 
 
-```{r}
+# Deseq on the 48 hr timepoint comparing all 48 hr time points
+# Above tested for the 0 timepoint essentially WT vs KO
+# Now we are doing WT vs KO after exposure to firre combined with controls (e.g. WT)  same vs KO
+# Note that this is confounding induced and control models - the above is more realistic WT vs KO
+```{r 48 timepoint only design model KO vs WT}
+
 fortyeight_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 fortyeight_counts <- count_matrix[,fortyeight_samples$sample_id]
 
