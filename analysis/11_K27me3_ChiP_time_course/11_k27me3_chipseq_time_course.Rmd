@@ -354,9 +354,6 @@ dds <- DESeqDataSetFromMatrix(countData = zero_counts,
                               colData = zero_samples,
                              design = ~ firre_ko)
 
-#TODO I am guessing the plot has more - values because KO has less K27me3
-#TODO investigate bigWig
-
 # running 
 dds <- DESeq(dds)
 
@@ -366,14 +363,19 @@ res <- results(dds, name = "firre_ko_WT_vs_KO")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# finding sig peaks with LFC > 2 fold up or down
 
-# TODO what am I missing :()
-# THere are some sig peaks (spoiler) so filter to 2 fold change (2 to -2)
-res <- results(dds, name = "firre_ko_WT_vs_KO")
-res_df <- res %>% as.data.frame() %>%
+# loss of K27me3 in KO 
+wt_vs_ko_k27me3_sig_down <- res_df %>% filter(log2FoldChange < -1)
+write_csv(wt_vs_ko_k27me3_sig_down, "results/wt_vs_ko_k27me3_sig_down.csv")
 
-sig <- res_df %>% filter(padj < 0.05 & abs(log2FoldChange > 1)) 
+# gain of K27me3 in KO 
+wt_vs_ko_k27me3_sig_up <- res_df %>% filter(log2FoldChange > 1)
+write_csv(wt_vs_ko_k27me3_sig_up, "results/wt_vs_ko_k27me3_sig_up.csv")
 
+# combined sig
+all_wt_vs_ko_sig_k27me3 <- bind_rows(wt_vs_ko_k27me3_sig_up, wt_vs_ko_k27me3_sig_down)
+write_csv(all_wt_vs_ko_sig_k27me3, "results/all_wt_vs_ko_sig_k27me3.csv")
 
 # Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
@@ -382,16 +384,21 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 
 
-# Some sig peaks finally :) 
-# TODO make a df of these peaks
+
+#TODO why is there a logical error with these types of indexing
 sig_threshold <- sig[filter(sig$log2FoldChange >= 1)]
-
 sig_threshold <- filter(sig[sig$log2FoldChange] >= -1)
-
+sig_x <- res_df %>%
+  filter(abs(log2FoldChange > 1))
 sig_threshold <- filter(sig$log2FoldChange <= -1)
+
+#TODO figure out how to connect peak names to big wig and look at raw dat for these sites
+#TODO do the sig peaks overlap target genes.
 ```
 ### Result: there are some significant peaks between WT and KO worth looking at more !
 ### Result: the fold changes are not that big -- look at "sig" peaks in raw data
+### Result: there are only 115 sig peaks so not very maany relative to  ~120,000 peaks in counts
+
 
 
 
@@ -402,82 +409,106 @@ sig_threshold <- filter(sig$log2FoldChange <= -1)
 # Note that this is confounding induced and control models - the above is more realistic WT vs KO
 ```{r 48 timepoint only design model KO vs WT}
 
+# grabbing 48 hr samples
 fortyeight_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 fortyeight_counts <- count_matrix[,fortyeight_samples$sample_id]
 
+# setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = fortyeight_counts,
                               colData = fortyeight_samples,
                               design = ~ firre_ko)
+# running 
 dds <- DESeq(dds)
 resultsNames(dds)
+
+# filtering to sig P < 0.05 peak differences
 res <- results(dds, name = "firre_ko_WT_vs_KO")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# there are 116 sig peaks down 2 fold
+sig_up <- res_df %>% filter(log2FoldChange < -1)
+
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result: There is a global trend of less K27m3 in Firre KO lines
+### Result: there are 116 sig down peaks > 2 fold -- but kinda  confusing  set up WT vs KO  0 time point is prob better
 
-```{r}
+
+# Comparing just the control lines across all timepoints
+```{r control lines across all timepoints}
+
+# selecting control lines and setting levels to WT and KO 
 ip_samples <- samples %>% filter(h3k27me3 == "IP", condition == "control")
 ip_counts <- count_matrix[,ip_samples$sample_id]
 ip_samples$firre_ko <- factor(ip_samples$firre_ko, levels = c("WT", "KO"))
+
+# Running Deseq
 dds <- DESeqDataSetFromMatrix(countData = ip_counts,
                               colData = ip_samples,
                               design = ~ firre_ko)
+
+# getting results and filtering to sig P < 0.05
 dds <- DESeq(dds)
 resultsNames(dds)
 res <- results(dds, name = "firre_ko_KO_vs_WT")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+
+#TODO check if direction could be switched (I don't think so but need to double check)
 ```
+### Result: The first time we see increased K27me3 (check design WT/KO?)
 
 
-```{r}
-sig <- sig %>% rownames_to_column("name")
-sig <- merge(sig, chipr_peaks)
+# Trying a combined model to determine peaks that are not in any dox control but in 
+```{r LRT for dox effects and determing }
 
-sig <- sig %>% mutate(width = end - start)
-nrow(sig) / nrow(chr11_chipr)
-chr11_chipr <- chipr_peaks %>% filter(chr == "chr11")
-```
-
-
-
-
-```{r}
+# selecting samples
 ip_samples <- samples %>% filter(h3k27me3 == "IP")
 ip_counts <- count_matrix[,ip_samples$sample_id]
 
+# setting factors
+#TODO what is going on here ?
 ip_samples$firre_ko <- factor(ip_samples$firre_ko, levels = c("WT", "KO"))
 ip_samples$timepoint <- factor(ip_samples$timepoint, levels = c("0", "48"))
 dds <- DESeqDataSetFromMatrix(countData = ip_counts,
                               colData = ip_samples,
                               design = ~ firre_itg + timepoint + firre_itg*timepoint)
+
+# running Deseq
 dds <- DESeq(dds, test = "LRT",
              reduced = ~ firre_itg + timepoint)
+
+# getting results and filtering to P < 0.05
 resultsNames(dds)
 res <- results(dds, name = "firre_itgITG.timepoint48")
-
 res_df <- res %>% as.data.frame()
-
 sig <- res_df %>% filter(padj < 0.05)
 
+# Plotting base mean vs fold change
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
+### Result: seeing increased K27me3 in WT controlled for dox? (DOBLE CHECK MODEL)
 
 
-
-
-
-
-
-
+# All peak files
 ```{r}
+
+#TODO start here
 # collect the peakfiles
 peak_files <- list.files("/scratch/Shares/rinn/JR/FIRRE_KO_TG_K27me3_CHIPSEQ/results_all_individual_runs/broad_peaks", pattern = ".broadPeak", full.names = T)
 cat(peak_files)
