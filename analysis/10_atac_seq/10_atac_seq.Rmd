@@ -34,6 +34,11 @@ thresh <- paste0("pval", pval_thresh)
 # All needed ATACseq files : g2s, tpm, atac_samples, atac_counts, atac_consensus, tac_consensus_gr
 load("../01_setup/results/atacseq_data.RData", verbose = T)
 
+#TODO note atac_consensus is from the NF_CORE if any peak it is counted.
+# So consensus here means union of all peaks 
+# if peaks overlap the boundaries are determined by: union distance of start and stop
+# If two seperate peaks overlap one peak and are > 1bp apart they will be counted as two peaks.
+
 # atac_counts is 
 nrow(atac_counts)
 ```
@@ -213,9 +218,10 @@ save(atac_vszero_sig, file = "results/atac_vszero_sig.RData")
 
 #TODO go over with Michael
 # Loading combined short time course sig genes 
-load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData")
+load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData", verbose = T)
      
      # short_vszero_sig.RData
+# filtering to only atac peaks that are sig
 sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
 
 # making a promoters GenomicRanges with promoters function
@@ -230,20 +236,25 @@ promoters_df <- promoters_gr %>% as.data.frame() %>%
 promoters_gr <- promoters_gr[promoters_gr$gene_id %in%promoters_df$gene_id]
 
 # establishing peak centers building Ranges for sig atac peaks
+# divide peak by two adn connect to start point
 peak_centers <- start(sig_atac_gr) + round(width(sig_atac_gr)/2)
 sig_atac_center <- GRanges(seqnames = seqnames(sig_atac_gr),
                            ranges = IRanges(start = peak_centers,
                                             end = peak_centers),
+                           # naming peak
                            interval_id = sig_atac_gr$interval_id)
 
 # setting peak to 100Kb up and downstream from peak center
 offset <- 1e5
 
 # creating 10Kb up and downstream of peak center with offset
+# NOTE if you run twice it will affet the results !!
+# Start and end are accessor functions to go into these values
 start(sig_atac_center) <- start(sig_atac_center) - offset
 end(sig_atac_center) <- end(sig_atac_center) + offset
 
 # overlaps with TSS for sig atac peak centers
+# NOTE the ordering of overlaps matters for the lines below
 peak_tss_overlaps <- findOverlaps(promoters_gr, sig_atac_center)
 
 # making Granges into data frame
@@ -276,10 +287,6 @@ overlapping_df$deg <- overlapping_df$gene_name %in%short_vszero_sig$gene_name
 # making a new col of random values "runif" r uniform dist
 overlapping_df$y <- runif(nrow(overlapping_df))
 
-# Gfap has a closer peak changes that explains its expression change.
-# there are two peaks near GFAP so grabbing the closest one
-overlapping_df$deg[overlapping_df$interval_id == "Interval_26047" &
-                     overlapping_df$gene_name == "Gfap"] <- FALSE
 
 # plotting position of ATAC peak distance to nearest TSS
 ggplot(overlapping_df %>% filter(gene_name != "Firre", deg == TRUE), aes(x = dist_to_peak, fill = deg)) +
@@ -363,6 +370,7 @@ colnames(atac_lfc_matrix)[[1]] <- "0"
 # ordering peaks
 atac_lfc_matrix <- atac_lfc_matrix[ordering$interval_id,]
 
+# ha = heatmap annotation
 row_ha = rowAnnotation(deg = as.numeric(rownames(atac_lfc_matrix) %in% overlapping_df$interval_id[overlapping_df$deg == TRUE]),
                        col = list(deg = c("1" = "black", "0" = "white")))
 
@@ -545,75 +553,6 @@ ggsave("figures/firre_responder_atac_timing_heatmap_zscaled.pdf", height = 3.5, 
 ### Result: gene expression is induced ~57 min after atac peak is called
 
 
-# Determining where ATAC peaks reside relative to TSS of DEG Firre targets vs all other genes
-```{r ATAC positions vs all}
-
-#TODO PRDM14 doesn't show up in this plot.
-
-# Making a GRanges of all atac consensus peaks (union of all peaks called in all timepoints)
-sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
-length(sig_atac_gr)
-
-# promoters for all genes except psudo genes
-promoters_gr <- promoters(genes, upstream = 1, downstream = 1)
-promoters_df <- promoters_gr %>% as.data.frame() %>%
-  filter(gene_type %in% c("protein_coding", "processed_transcript", "bidirectional_promoter_lncRNA",
-                          "antisense", "lincRNA", "sense_intronic"))
-
-# Changing promters GR to not have pseudo genes.
-promoters_gr <- promoters_gr[promoters_gr$gene_id %in%promoters_df$gene_id]
-
-table(promoters_df$gene_type)
-
-# defining ATAC peak centers
-sig_atac_center <- GRanges(seqnames = seqnames(sig_atac_gr),
-                           ranges = IRanges(start = start(sig_atac_gr) + ((end(sig_atac_gr) - start(sig_atac_gr))/2),
-                                            end = start(sig_atac_gr) + ((end(sig_atac_gr) - start(sig_atac_gr))/2) + 1),
-                           interval_id = sig_atac_gr$interval_id)
-
-# Determinign how far to the right or left a gene can be ( in paper we used 100Kb 1e5 )
-offset <- 1e5
-
-# Creating ranges with offset
-start(sig_atac_center) <- start(sig_atac_center) - offset
-end(sig_atac_center) <- end(sig_atac_center) + offset
-
-# finding the overlaps with promoters and offset
-peak_tss_overlaps <- findOverlaps(promoters_gr, sig_atac_center)
-
-# finding a bunch of features of the overlaps
-atac_df <- sig_atac_center %>% as.data.frame()
-promoters_df <- promoters_gr %>% as.data.frame() %>% dplyr::select(gene_name, gene_id, seqnames, start, end)
-
-# adding features to the atac peaks wrt/ overlapping promoter (@to)
-overlapping_df <- atac_df[peak_tss_overlaps@to, ]
-
-# peak_tss_overlaps @ from is promoter centric overlap features
-overlapping_df$gene_id <- promoters_df$gene_id[peak_tss_overlaps@from]
-overlapping_df$gene_name <- promoters_df$gene_name[peak_tss_overlaps@from]
-overlapping_df$gene_tss <- promoters_df$start[peak_tss_overlaps@from]
-overlapping_df$gene_chr <- promoters_df$seqnames[peak_tss_overlaps@from]
-
-
-# creating a col for distance from TSS for all consensus peaks
-overlapping_df <- overlapping_df %>%
-  mutate(dist_to_tss = gene_tss - (start+offset))
-
-# 55 peaks have overlaps 
-length(unique(overlapping_df$interval_id))
-overlapping_df$deg <- overlapping_df$gene_name %in%short_vszero_sig$gene_name
-overlapping_df$y <- runif(nrow(overlapping_df))
-
-# Gfap has a closer peak changes that explains its expression change.
-overlapping_df$deg[overlapping_df$interval_id == "Interval_26047" &
-                     overlapping_df$gene_name == "Gfap"] <- FALSE
-
-ggplot(overlapping_df %>% filter(gene_name != "Firre"), aes(x = dist_to_tss, y = y, color = deg)) +
-  geom_point() +
-  facet_grid(deg~.)
-
-```
-
 # Determining the abundance of max lfc 
 ### This is using the combined short course versus 0 values
 ```{r off to on genes after firre induction - short time course}
@@ -623,7 +562,6 @@ load("../01_setup/results/rnaseq_data.RData", verbose = T)
 
 # filtering to significant firre target genes
 sig_gene_tpm <- tpm %>%
-  
   #filtering to sig deg in short time course 
   filter(gene_id %in% short_vszero_sig$gene_id) %>%
   # pivot longer so each gene entry will now have all the time point values as rows
@@ -633,8 +571,7 @@ sig_gene_tpm <- tpm %>%
   filter(cell_type == "ESC",firre_induced == "firre_induced", as.numeric(as.character(timepoint)) == 0,
          timecourse_length == "short") %>%
   group_by(gene_id, gene_name) %>%
-  # summarizing mean over all timepoints?
-  # TODO what is TPM plotted
+  # TPM of 0 time point for sig induced genes in WT and CNTRL
   summarize(tpm = mean(tpm))
 
 # making a column to record if sig gene has an atac peak
@@ -645,7 +582,9 @@ sig_gene_tpm$has_atac_peak[sig_gene_tpm$gene_name == "Firre"] <- FALSE
 
 # plotting
 ggplot(sig_gene_tpm %>% filter(gene_name != "Firre"), aes(x = tpm, fill = has_atac_peak)) +
-  geom_density(alpha = 0.2)
+  geom_density(alpha = 0.2) +
+  ggtitle("TPM at time zero")
+
 ```
 ### Result: Those Firre targets with an ATAC peak are similar to those with out (mean abundance)
 ### Result: There is a slight shift of more abundant expression of target gene without atac peak
@@ -706,9 +645,15 @@ sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_
 findOverlaps(pub_rap_peaks_gr, fr_genes)
 # NO overlaps
 
-findOverlaps(loyal_rap_peaks_gr, fr_genes)
-# 3 overlaps
-#TODO are these firre? How to index and find out
+# finding overlaps with loyals analysis
+overlap_loyal_rap <-findOverlaps(loyal_rap_peaks_gr, fr_genes)
+# indices of overlaps for rap peaks
+overlap_loyal_rap@to
+
+# getting the overlapping genes and writting out results
+rap_loyal_overlap_gene_names <- fr_genes$gene_name[overlap_loyal_rap@to] %>% as.data.frame()
+write_csv(rap_loyal_overlap_gene_names, "results/loyal_sig_overlaps_with_firre_responders.csv")
+# LOYAL RAP overlaps with Tmem178 2 times and PRdm14 once
 
 # overlaps with promoters
 findOverlaps(pub_rap_peaks_gr, fr_promoters_gr)
@@ -762,7 +707,9 @@ promoters_gr <- promoters_gr[promoters_gr$gene_id %in% promoters_df$gene_id]
 fr_promoters_gr <- promoters_gr[promoters_gr$gene_id %in% all_firre_responder_genes]
 
 length(fr_promoters_gr)
-# still have all 526 = good
+# We lost 6 genes let's see what they are
+
+removed_genes <- fr_genes$gene_name[!(fr_genes$gene_id %in% fr_promoters_gr$gene_id)]
 
 # extending the annotations by 50Kb
 orig_widths <- width(fr_promoters_gr)
@@ -774,15 +721,23 @@ stopifnot(all(width(fr_promoters_gr) - orig_widths == extend_region *2))
 findOverlaps(pub_rap_peaks_gr, fr_genes)
 # No overlaps
 
-findOverlaps(loyal_rap_peaks_gr, fr_genes)
+all_sig_gene_rap_overlaps <- findOverlaps(loyal_rap_peaks_gr, fr_genes)
 # 71 overlaps 
-#TODO how to index 
+# let's index and write out gene names
+all_loyal_rap_overlap_gene_names <- fr_genes$gene_name[all_sig_gene_rap_overlaps@to] %>% as.data.frame()
+write_csv(all_loyal_rap_overlap_gene_names, "results/loyal_sig_overlaps_with_all_timecourse_responders.csv")
+
 
 findOverlaps(pub_rap_peaks_gr, fr_promoters_gr)
 # No overlaps
 
+
+#TODO start here
 findOverlaps(loyal_rap_peaks_gr, fr_promoters_gr)
 # 49 overlaps
+
+# all_loyal_rap_overlap_gene_names <- fr_genes$gene_name[all_sig_gene_rap_overlaps@to] %>% as.data.frame()
+# write_csv(all_loyal_rap_overlap_gene_names, "results/loyal_sig_overlaps_with_all_timecourse_responders.csv")
 ```
 
 
