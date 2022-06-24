@@ -553,6 +553,131 @@ ggsave("figures/firre_responder_atac_timing_heatmap_zscaled.pdf", height = 3.5, 
 ### Result: gene expression is induced ~57 min after atac peak is called
 
 
+
+#ATAC peaks that overlap any firre sig gene in all time courses
+```{r ATAC overlaps with all firre sig genes in all time courses}
+
+#TODO start here 
+load("results/atacseq_firre_vs_control.RData", verbose = T)
+
+
+
+# All Firre responder genes
+load("../01_setup/results/rnaseq_data.RData", verbose = T)
+load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData", verbose = T)
+load("../04_Firre_ko_long_time_course/results/ko_rescue_long_vszero_sig.RData", verbose = T)
+load("../05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData", verbose = T)
+load("../06_WT_long_time_course/results/wt_overexp_long_vszero_sig.RData", verbose = T)
+load("../07_wt_short_time_course/results/wt_overexp_short_vszero_sig.RData", verbose = T)
+
+# combining all sig genes in all time courses
+all_firre_responder_genes <- unique(c(short_vszero_sig$gene_id,
+                                      ko_rescue_long_vszero_sig$gene_id,
+                                      ko_rescue_short_vszero_sig$gene_id,
+                                      wt_overexp_long_vszero_sig$gene_id,
+                                      wt_overexp_short_vszero_sig$gene_id))
+
+
+length(all_firre_responder_genes)
+# there are 526 sig genes
+
+
+# intersecting to make fr_genes that are sig in all time courses
+fr_genes <- genes[genes$gene_id %in% all_firre_responder_genes]
+
+# there are 526 sig genes in all time courses
+unique(length(fr_genes))
+
+
+# defining promoter regions 
+promoters_gr <- promoters(fr_genes, upstream = 1, downstream = 1)
+promoters_df <- promoters_gr %>% as.data.frame() %>%
+  filter(gene_type %in% c("protein_coding", "processed_transcript", "bidirectional_promoter_lncRNA",
+                          "antisense", "lincRNA", "sense_intronic"))
+
+# creating sig_atac_gr
+# first load atac_consensus_gr
+load("../01_setup/results/atacseq_data.RData", verbose = T)
+
+# loading atac_sig genes versus 0
+load("results/atac_vszero_sig.RData", verbose = T)
+
+# filtering sig_atac_gr to only sig atac peaks
+sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
+
+
+# defining atac peak centers to overlap with promoters above
+peak_centers <- start(sig_atac_gr) + round(width(sig_atac_gr)/2)
+sig_atac_center <- GRanges(seqnames = seqnames(sig_atac_gr),
+                           ranges = IRanges(start = peak_centers,
+                                            end = peak_centers),
+                           # naming peak
+                           interval_id = sig_atac_gr$interval_id)
+
+# setting peak to 100Kb up and downstream from peak center
+offset <- 1e5
+
+# creating 10Kb up and downstream of peak center with offset
+# NOTE if you run twice it will affet the results !!
+# Start and end are accessor functions to go into these values
+start(sig_atac_center) <- start(sig_atac_center) - offset
+end(sig_atac_center) <- end(sig_atac_center) + offset
+
+# overlaps with TSS for sig atac peak centers
+# NOTE the ordering of overlaps matters for the lines below
+peak_tss_overlaps <- findOverlaps(promoters_gr, sig_atac_center)
+
+# making Granges into data frame
+atac_df <- sig_atac_center %>% as.data.frame()
+promoters_df <- promoters_gr %>% as.data.frame()
+
+# finding a bunch of overlapping features with atac peak centers 
+# @to is atac sig GR @ from is promters GR
+overlapping_df <- atac_df[peak_tss_overlaps@to, ]
+overlapping_df$gene_id <- promoters_df$gene_id[peak_tss_overlaps@from]
+overlapping_df$gene_name <- promoters_df$gene_name[peak_tss_overlaps@from]
+overlapping_df$gene_tss <- promoters_df$start[peak_tss_overlaps@from]
+overlapping_df$gene_chr <- promoters_df$seqnames[peak_tss_overlaps@from]
+overlapping_df$gene_strand <- promoters_df$strand[peak_tss_overlaps@from]
+
+# calculating distance from TSS
+# subtracting peak center from the TSS to find distance
+overlapping_df <- overlapping_df %>%
+  mutate(dist_to_tss = gene_tss - (start+offset),
+         dist_to_peak = (start+offset) - gene_tss)
+
+# some distances are positive and negative depending on up or down stream
+# fixing to plot so they are all in the same 
+# Flip the minus strand differences so that it's a TSS centric view
+overlapping_df[overlapping_df$gene_strand == "-", "dist_to_peak"] <- -1* overlapping_df[overlapping_df$gene_strand == "-", "dist_to_peak"] 
+
+# finding overlaps with sig genes in short combined
+length(fr_genes$gene_name)
+overlapping_df$deg <- overlapping_df$gene_name %in%fr_genes$gene_name
+
+# making a new col of random values "runif" r uniform dist
+overlapping_df$y <- runif(nrow(overlapping_df))
+
+
+# plotting position of ATAC peak distance to nearest TSS
+ggplot(overlapping_df %>% filter(gene_name != "Firre", deg == TRUE), aes(x = dist_to_peak, fill = deg)) +
+  geom_density(adjust = 1.2) +
+  geom_vline(xintercept = 0, lty = 2) +
+  geom_rug() +
+  scale_fill_manual(values = c("#424242","#a8404c")) +
+  scale_x_continuous(breaks = seq(from = -1e5, to = 1e5, by = 5e4),
+                     labels = c("-100", "-50", "TSS", "50", "100"),
+                     limits = c(-1e5,1e5))
+
+# saving
+ggsave("figures/atac_peak_tss_density_all_fr_genes.pdf", height = 2, width = 2.5)
+
+length(overlapping_df)
+
+```
+### Result: only 10 more new peaks show up despite increasing from 30 to 526  firre responders across all time courses.
+
+
 # Determining the abundance of max lfc 
 ### This is using the combined short course versus 0 values
 ```{r off to on genes after firre induction - short time course}
@@ -666,7 +791,7 @@ findOverlaps(loyal_rap_peaks_gr, sig_atac_gr)
 # NO Overlaps
 
 # All Firre responder genes
-load("../08_combined_wt_ko_short_time_course/results/short_combined_vs_zero.RData", verbose = T)
+load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData", verbose = T)
 load("../04_Firre_ko_long_time_course/results/ko_rescue_long_vszero_sig.RData", verbose = T)
 load("../05_Firre_ko_short_time_course/results/ko_rescue_short_vszero_sig.RData", verbose = T)
 load("../06_WT_long_time_course/results/wt_overexp_long_vszero_sig.RData", verbose = T)
@@ -731,362 +856,5 @@ write_csv(all_loyal_rap_overlap_gene_names, "results/loyal_sig_overlaps_with_all
 findOverlaps(pub_rap_peaks_gr, fr_promoters_gr)
 # No overlaps
 
-
-#TODO start here
-findOverlaps(loyal_rap_peaks_gr, fr_promoters_gr)
-# 49 overlaps
-
-# all_loyal_rap_overlap_gene_names <- fr_genes$gene_name[all_sig_gene_rap_overlaps@to] %>% as.data.frame()
-# write_csv(all_loyal_rap_overlap_gene_names, "results/loyal_sig_overlaps_with_all_timecourse_responders.csv")
 ```
-
-
-
-```{r}
-
-#TODO not sure
-# sftp://fiji.colorado.edu/scratch/Shares/rinn/Michael/RAP/archive/FromJesse/Firre-Round4/Firre-6wash_vs_Input.W2000_O1000.p10.r10.bed
-# sftp://fiji.colorado.edu/scratch/Shares/rinn/Michael/RAP/firre_rap/results/bwa/mergedLibrary/macs/broadPeak/firre_rap_R1_peaks.broadPeak
-
-orig_rap_peaks <- read.table("/scratch/Shares/rinn/Michael/RAP/archive/FromJesse/Firre-Round4/Firre-6wash_vs_Input.W2000_O1000.p10.r10.bed")
-colnames(orig_rap_peaks) <- c("chr", "start", "end")
-
-orig_rap_peaks_gr <- GRanges(seqnames = orig_rap_peaks$chr,
-                             ranges = IRanges(start = orig_rap_peaks$start,
-                                              end = orig_rap_peaks$end))
-
-sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
-
-new_rap_peaks <- rtracklayer::import("/scratch/Shares/rinn/Michael/RAP/firre_rap/results/bwa/mergedLibrary/macs/broadPeak/firre_rap_R1_peaks.broadPeak")
-
-findOverlaps(sig_atac_gr, new_rap_peaks)
-sig_atac_gr[34]
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Seems redundant with above
-```{r}
-
-#TODO what to keep !
-
-# Find out which DE genes have an ATAC peak changing nearby
-load("../11_short_timecourse_combined/results/short_vszero_sig.RData")
-
-sig_genes_gr <- genes[genes$gene_name %in% short_vszero_sig$gene_name]
-
-sig_genes_df <- sig_genes_gr %>% as.data.frame()
-length(sig_genes_gr)
-# Extend 10kb
-start(sig_genes_gr) <- start(sig_genes_gr) - 10000
-end(sig_genes_gr) <- end(sig_genes_gr) + 10000
-
-sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
-length(sig_atac_gr)
-peak_gene_overlaps <- findOverlaps(sig_genes_gr, sig_atac_gr)
-atac_df <- sig_atac_gr %>% as.data.frame()
-sig_genes_df <- sig_genes_gr %>% as.data.frame() %>% dplyr::select(gene_name, gene_id, seqnames, start, end)
-overlapping_df <- atac_df[peak_gene_overlaps@to, ]
-overlapping_df$gene_id <- sig_genes_df$gene_id[peak_gene_overlaps@from]
-overlapping_df$gene_name <- sig_genes_df$gene_name[peak_gene_overlaps@from]
-overlapping_df$gene_tss <- sig_genes_df$start[peak_gene_overlaps@from] + 10000
-overlapping_df$gene_chr <- sig_genes_df$seqnames[peak_gene_overlaps@from]
-length(unique(overlapping_df$gene_name))
-
-
-overlapping_df <- overlapping_df %>%
-  mutate(peak_center = start + (end - start),
-         dist_to_tss = peak_center - gene_tss)
-
-overlapping_df <- overlapping_df %>%
-  mutate(sig_peak = interval_id %in% sig_atac_peaks$interval_id)
-```
-
-
-
-```{r}
-sig_peak_counts <- atac_rlog_counts %>%
-  filter(interval_id %in% sig_atac_peaks$interval_id)
-
-sig_peak_count_summary <- sig_peak_counts %>%
-  filter(firre_induced == "firre_induced") %>%
-  group_by(interval_id, timepoint) %>%
-  summarize(count = mean(count))
-
-zero_tp <- sig_peak_count_summary %>%
-  filter(timepoint == 0) %>%
-  dplyr::select(-timepoint) %>%
-  dplyr::rename(zero_val = count)
-
-sig_peak_count_summary <- sig_peak_count_summary %>%
-  left_join(zero_tp) %>%
-  mutate(fc = count / zero_val,
-         l2fc = log2(fc))
-
-sp_matrix <- sig_peak_count_summary %>%
-  dplyr::select(interval_id, timepoint, l2fc) %>%
-  pivot_wider(names_from = timepoint, names_sort = T, values_from = l2fc) %>%
-  column_to_rownames("interval_id") %>%
-  as.matrix()
-
-sp_scaled <- t(scale(t(sig_peak_count_summary)))
-pheatmap::pheatmap(sp_matrix, cluster_cols = F, show_rownames = F, breaks = seq(-0.25, 0.25, length.out = length(col_pal10)),
-                   color = col_pal10)
-
-
-short_lfc <- short_vszero_sig %>%
-  dplyr::select(gene_name, timepoint, log2FoldChange) %>%
-  pivot_wider(names_from = timepoint, names_sort = TRUE, values_from = log2FoldChange) %>%
-  column_to_rownames("gene_name") %>%
-  as.matrix()
-```
-
-
-
-```{r}
-ggplot(rlog_df %>% filter(interval_id == "Interval_76872", firre_induced == "firre_induced"), aes(x = timepoint, y = count, color = firre_ko)) +
-  geom_point()
-
-
-summary(mod1)
-sig_atac_peaks <- atac_lfc %>%
-  filter(padj <= 0.05)
-
-# abs(log2FoldChange) > log2(1.5)
-```
-
-```{r}
-
-load("../09_short_timecourse_overexpression/results/wt_overexp_short_vszero_sig.RData", verbose = T)
-load("../06_short_timecourse_rescue/results/ko_rescue_short_vszero_sig.RData")
-
-ko_rescue_1 <- unique(ko_rescue_short_vszero_sig$gene_name)
-wt_overexp_2 <- unique(wt_overexp_short_vszero_sig$gene_name)
-short_3 <- unique(short_vszero_sig$gene_name)
-
-individual_overlaps_12 <- intersect(ko_rescue_1, wt_overexp_2)
-all_overlaps_123 <- intersect(individual_overlaps_12, short_3)
-all_sig_genes <- unique(c(ko_rescue_1, wt_overexp_2, short_3))
-gencode_genes <- rtracklayer::import("../util/gencode.vM25.annotation.genes.gtf")
-
-# sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% sig_atac_peaks$interval_id]
-
-
-
-
-
-
-
-# What is the difference between the genes changing without an ATAC-seq peak change
-# and those that do? 
-# Are we over controlling for dox? Are there ATAC-seq windows in these regions that have 
-# linearly increasing trends, but are not significant when compared to the dox control? 
-
-
-
-
-# Let's retrieve the peak counts for the ATAC-seq peaks in the region
-# of these genes.
-peaks_of_interest <- unique(overlapping_df$interval_id)
-
-library(broom)
-
-peak_id <- peaks_of_interest[[1]]
-# Run linear model
-peak_lm <- function(peak_id) {
-  peak1 <- rlog_df %>% filter(interval_id == peak_id, 
-                              firre_induced == "firre_induced")
-  mod1 <- lm(peak1$count~peak1$timepoint)
-  res1 <- tidy(mod1) 
-  res1$intercept <- res1$estimate[[1]]
-  res1 <- res1[2,2:ncol(res1)]
-  res1 <- res1 %>%
-    mutate(interval_id = peak_id) %>%
-    dplyr::rename(slope = estimate)
-  #WT
-  peak1 <- rlog_df %>% filter(interval_id == peak_id, 
-                              firre_induced == "firre_induced",
-                              firre_ko == "WT")
-  mod2 <- lm(peak1$count~peak1$timepoint)
-  res2 <- tidy(mod2) 
-  res2$intercept <- res2$estimate[[1]]
-  res2 <- res2[2,2:ncol(res2)]
-  res2 <- res2 %>%
-    dplyr::select(estimate, p.value, intercept) %>%
-    dplyr::rename(WT_slope = estimate,
-                  WT_pval = p.value,
-                  WT_intercept = intercept)
-  #KO
-  peak1 <- rlog_df %>% filter(interval_id == peak_id, 
-                              firre_induced == "firre_induced",
-                              firre_ko == "KO")
-  mod3 <- lm(peak1$count~peak1$timepoint)
-  res3 <- tidy(mod3) 
-  res3$intercept <- res3$estimate[[1]]
-  res3 <- res3[2,2:ncol(res3)]
-  res3 <- res3 %>%
-    dplyr::select(estimate, p.value, intercept) %>%
-    dplyr::rename(KO_slope = estimate,
-                  KO_pval = p.value,
-                  KO_intercept = intercept)
-  res <- cbind(res1, res2)
-  res <- cbind(res, res3)
-  return(res)
-  
-  
-}
-
-peak_lm_res <- lapply(peaks_of_interest, peak_lm) %>%
-  bind_rows()
-save(peak_lm_res, file = "results/peak_lm_res.RData")
-
-
-hmm <- overlapping_df %>%
-  left_join(peak_lm_res)
-max(peak_lm_res$p.value)
-max(hmm$p.value)
-hmm$padj <- p.adjust(hmm$p.value)
-
-huh <- hmm %>% filter(p.value < 0.05)
-```
-
-# Gene expresion changes vs atac-seq
-
-```{r}
-# Let's do rapgef4
-huh1 <- hmm %>% filter(gene_name %in% short_3)
-goi_atac_peaks <-huh1 %>% filter(gene_name == "Duox1") %>%
-  mutate(sig = p.value < 0.05)
-unique(goi_atac_peaks$interval_id)
-# goi_atac_slopes <- goi_atac_peaks %>%
-#   dplyr::select(interval_id, dist_to_tss, slope, p.value, )
-huh1_batch <- short_3[1:10]
-ggplot(huh1, aes(x = dist_to_tss, y = KO_slope, color = sig_peak)) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  geom_point() +
-  facet_wrap(~gene_name, scales = "free_x")
-ggsave("figures/atacpeak_locations_ko.pdf", height = 7, width = 7)
-ggplot(goi_atac_slopes, aes(x = slope, y = -log10(p.value))) +
-  geom_point()
-
-poi <- goi_atac_peaks %>% arrange(p.value) %>%
-  dplyr::slice(1) %>%
-  pull(interval_id)
-
-poi_vals <- rlog_df %>% filter(interval_id == poi, 
-                               firre_induced == "firre_induced")
-
-ggplot(poi_vals, aes(x = timepoint, y = count)) +
-  geom_point()
-
-poi_mean <- poi_vals %>%
-  group_by(timepoint) %>%
-  summarize(count = mean(count))
-ggplot(poi_mean, aes(x = timepoint, y = count)) +
-  geom_point()
-ggplot(short_vszero_sig %>% filter(gene_name == "Shf"), 
-       aes(x = timepoint, y = log2FoldChange)) +
-  geom_point()
-range01 <- function(x){(x-min(x))/(max(x)-min(x))}
-goi_vals <- short_vszero_sig %>% filter(gene_name == "Shf")
-goi_vals$relexp <- range01(goi_vals$log2FoldChange)
-
-ggplot(goi_vals, 
-       aes(x = timepoint, y = relexp)) +
-  geom_point()
-poi_mean$relexp <- range01(poi_mean$count)
-ggplot(poi_mean, 
-       aes(x = timepoint, y = relexp)) +
-  geom_point()
-
-
-# Combine
-combined_vals <- bind_rows(poi_mean %>% dplyr::select(timepoint, relexp) %>%
-                             mutate(type = "atac_signal"),
-                           goi_vals %>% dplyr::select(timepoint, relexp) %>%
-                             mutate(type = "gene_expression"))
-
-ggplot(combined_vals, aes(x = timepoint, y = relexp, color = type, group = type)) +
-  geom_point() +
-  geom_smooth(se = FALSE, span = 1.1)
-
-ggplot(combined_vals, aes(x = timepoint, y = type, fill = relexp)) +
-  geom_tile() +
-  scale_fill_gradientn(colors = col_pal10[50:100])
-
-```
-
-
-
-```{r}
-table(huh$gene_name)
-length(unique(huh$gene_name))
-
-table(short_3 %in% unique(huh$gene_name))
-
-
-huh2 <- hmm %>% filter(WT_pval < 0.05)
-table(wt_overexp_2 %in% huh2$gene_name)
-table(all_overlaps_123 %in% huh2$gene_name)
-
-huh3 <- hmm %>% filter(KO_pval < 0.05)
-table(ko_rescue_1 %in% huh3$gene_name)
-table(all_overlaps_123 %in% huh3$gene_name)
-
-
-table(all_overlaps_123 %in% unique(huh$gene_name))
-sig_ov_peaks <- hmm %>% filter(padj < 0.05)
-
-short_vszero_sig <- short_vszero_sig %>%
-  mutate(has_atac_peak = gene_id %in% overlapping_df$gene_id)
-
-ggplot(short_vszero_sig, aes(x = timepoint, y= log2FoldChange, color = has_atac_peak)) +
-  geom_point() +
-  facet_wrap(~has_atac_peak)
-ggplot(short_vszero_sig, aes(x = log2FoldChange, y= -log10(padj), color = has_atac_peak)) +
-  geom_point() +
-  facet_wrap(~has_atac_peak)
-load("../01_setup/results/rnaseq_data.RData")
-```
-
-```{r}
-load("../06_short_timecourse_rescue/results/ko_rescue_short_vszero_sig.RData")
-ko_rescue_short_sig <- unique(ko_rescue_short_vszero_sig$gene_id)
-load("../09_short_timecourse_overexpression/results/wt_overexp_short_vszero_sig.RData")
-wt_overexp_short_sig <- unique(wt_overexp_short_vszero_sig$gene_id)
-
-sig_genes <- intersect(wt_overexp_short_sig, ko_rescue_short_sig)
-
-sig_genes_gr <- gencode_genes[gencode_genes$gene_id %in% sig_genes]
-# Extend 10kb
-start(sig_genes_gr) <- start(sig_genes_gr) - 50000
-end(sig_genes_gr) <- end(sig_genes_gr) + 50000
-
-peak_gene_overlaps <- findOverlaps(sig_genes_gr, sig_atac_gr)
-sig_atac_df <- sig_atac_gr %>% as.data.frame()
-
-sig_genes_df <- sig_genes_gr %>% as.data.frame() %>% dplyr::select(gene_name, gene_id, seqnames, start, end)
-
-overlapping_df <- sig_atac_df[peak_gene_overlaps@to, ]
-overlapping_df$gene_id <- sig_genes_df$gene_id[peak_gene_overlaps@from]
-overlapping_df$gene_name <- sig_genes_df$gene_name[peak_gene_overlaps@from]
-overlapping_df$gene_tss <- sig_genes_df$start[peak_gene_overlaps@from] + 50000
-overlapping_df$gene_chr <- sig_genes_df$seqnames[peak_gene_overlaps@from]
-```
-
-
-
 
