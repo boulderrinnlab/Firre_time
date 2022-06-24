@@ -16,17 +16,17 @@ source("../../util/_plot_theme.R")
 library(ChIPseqSpikeInFree)
 
 
-#TODO what are these
-Sys.setenv(PATH = "/opt/gcc/7.2.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/usr/lib/rstudio-server/bin/postback")
-Sys.setenv(LD_LIBRARY_PATH = "/opt/gcc/7.2.0/bin:/usr/lib64/R/lib::/lib:/usr/lib/jvm/jre/lib/amd64/server:/usr/lib/jvm/jre/lib/amd64:/usr/lib/jvm/java/lib/amd64:/usr/java/packages/lib/amd64:/lib:/usr/lib")
-Sys.setenv(LD_LIBRARY_PATH = "/usr/local/lib:/usr/lib:/usr/local/lib64:/usr/lib64")
-Sys.getenv("PATH")
-Sys.getenv("LD_LIBRARY_PATH")
-#TODO what is this doesn't install well
-install.packages("xgboost")
-system("gcc --version")
-system('export CXXFLAGS="$CXXFLAGS -fPIC"')
-system('export R_LIBS="~/R/lib"')
+# #TODO what are these
+# Sys.setenv(PATH = "/opt/gcc/7.2.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/usr/lib/rstudio-server/bin/postback")
+# Sys.setenv(LD_LIBRARY_PATH = "/opt/gcc/7.2.0/bin:/usr/lib64/R/lib::/lib:/usr/lib/jvm/jre/lib/amd64/server:/usr/lib/jvm/jre/lib/amd64:/usr/lib/jvm/java/lib/amd64:/usr/java/packages/lib/amd64:/lib:/usr/lib")
+# Sys.setenv(LD_LIBRARY_PATH = "/usr/local/lib:/usr/lib:/usr/local/lib64:/usr/lib64")
+# Sys.getenv("PATH")
+# Sys.getenv("LD_LIBRARY_PATH")
+# #TODO what is this doesn't install well
+# install.packages("xgboost")
+# system("gcc --version")
+# system('export CXXFLAGS="$CXXFLAGS -fPIC"')
+# system('export R_LIBS="~/R/lib"')
 
 ```
 # We performed K27me3 Chipseq at 48 hours after Firre induction in WT and KO lines and controls
@@ -34,16 +34,44 @@ system('export R_LIBS="~/R/lib"')
 # some evidence suggests that lack of Firre would result in decreased K27me3, thus induction would increase k37me3
 
 
-#TODO what is going on here ... running macs?
+# Running macs 
 ```{bash}
+# needs to be installed in home directory
+#TODO install anaconda
+# Install Miniconda3 to run a python environment where macs3 is installed
 
+# wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+# chmod u+x Miniconda3-latest-Linux-x86_64.sh 
+# Users/jori2700/bin/Minconda3
+# modified      /Users/jori2700/.bashrc
+# add to path : .bash_profile 
+# source .bash_profile
+# conda activate base
+# to deactivate the env session: conda deactivate
+
+# create environment for macs3 with naming first
+# conda create --name macs3
+
+# need to update python to 3.8
+# removing previous env : conda env remove --name macs3
+# conda create --name macs3 python=3.8
+#  source activate macs3
+# pip install macs3
+
+
+# Note Miniconda is now my new python environment so if other packages
+# reequire python (eg. deeptools) create environment in there
+```
+
+# Setting up SLURM job to run macs3
+```{bash running macs3 with SLURM}
 
 # Combine all data and call peaks on everything combined.
 #!/bin/bash
 #SBATCH -p short
 #SBATCH --job-name=h3k27me3_chipseq
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=michael.smallegan@colorado.edu
+#SBATCH --mail-user=john.rinn@colorado.edu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mem=100gb
@@ -52,8 +80,21 @@ system('export R_LIBS="~/R/lib"')
 #SBATCH --error=h3k27me3_chip_macs.err
 date; hostname
 
+# going to nf_core chipseq outputs
 BASE_PATH=/scratch/Shares/rinn/JR/FIRRE_KO_TG_K27me3_CHIPSEQ/results_all_individual_runs/bwa/mergedLibrary
-source ~/anaconda3/bin/activate macs3
+
+# calling out macs3 to avtivate an env
+source activate macs3
+
+# callpeak to call peaks
+# -f means bam file paired end 
+# -t is treatment group / -c is control group
+# -g is the genome "mm"
+# -n is the name of the output file
+# -- broad peak (narrow peak is the default)
+# --broad-cutoff is distance between peaks to be merged
+# -B probably makes a bam file for the outputs
+
 macs3 callpeak -f BAMPE -t \
 ${BASE_PATH}/KO_CTL_48_IP_R1.mLb.clN.sorted.bam \
 ${BASE_PATH}/KO_CTL_IP_R1.mLb.clN.sorted.bam \
@@ -74,6 +115,8 @@ ${BASE_PATH}/WTiTg_48_R1.mLb.clN.sorted.bam \
 ${BASE_PATH}/WTiTg_R1.mLb.clN.sorted.bam \
 -g mm -n FIRRE_H3K27me3_chipseq_combined --broad --broad-cutoff 0.1 -B
 date
+
+
 ```
 
 
@@ -82,15 +125,13 @@ date
 
 ```{r importing chip seq files and quantitating with Feature counts}
 
-# Create an SAF file
+# reading in macs3 outpout broad.peak file
 merged_peaks <- rtracklayer::import("macs/FIRRE_H3K27me3_chipseq_combined_peaks.broadPeak")
+
+# making into a dataframe
 merged_peaks_df <- merged_peaks %>% as.data.frame()
 
-#TODO what is this doing 
-merged_peaks_df %>% filter(seqnames == "chr2", end == 122348081)
-min(merged_peaks_df$qValue)
-
-#TODO only testing chr2 ?
+# this is the input for feature counts: creating .saf file
 merged_peaks_saf <- merged_peaks_df %>%
   dplyr::select(name,seqnames, start, end, strand) %>%
   dplyr::rename(GeneID = name,
@@ -102,15 +143,21 @@ merged_peaks_saf <- merged_peaks_df %>%
 write.table(merged_peaks_saf, "data/merged_peaks.saf", quote = F, row.names = F, sep = "\t")
 
 #TODO more stable file path
+# collecting all the bams for K27me3 chipseq to be used in feature counts
 bam_files <- list.files("/scratch/Shares/rinn/JR/FIRRE_KO_TG_K27me3_CHIPSEQ/results_all_individual_runs/bwa/mergedLibrary/", pattern = ".bam$", full.names = T)
 
 # using feature counts to quantitate K27me3 peaks in Firre induced and control lines
-counts <- featureCounts(bam_files, 
-                        annot.ext = "data/merged_peaks.saf", 
-                        isPairedEnd = TRUE, nthreads = 16)
+
+# Run this the first time - in the future load in .rds
+
+### IMPORTANT ###
+# counts <- featureCounts(bam_files, 
+#                         annot.ext = "data/merged_peaks.saf", 
+#                         isPairedEnd = TRUE, nthreads = 16)
 
 # Saving counts object for future analyses
-write_rds(counts, "results/merged_peak_counts.rds")
+# write_rds(counts, "results/merged_peak_counts.rds")
+
 # test read in of .rds
 counts <- read_rds("results/merged_peak_counts.rds")
 
@@ -119,34 +166,17 @@ nrow(counts$counts)
 # 102,957 peaks in merged data set
 ```
 
-# Not sure Chipr 
-```{r}
-
-#TODO not sure what this all is ChiPr peaks?
-# chipr_peaks <- read.table("data/chipr/h3k27me3_ip_chipr_optimal.bed") 
-# names(chipr_peaks) <- c("chr",	"start", "end", "name", "score", "strand", "signalValue", "pval", "qval")
-# 
-# chipr_peaks_saf <- chipr_peaks %>%
-#   dplyr::select(name, chr, start, end, strand) %>%
-#   dplyr::rename(GeneID = name,
-#                 Chr = chr,
-#                 Start = start,
-#                 End = end,
-#                 Strand = strand)
-# write.table(chipr_peaks_saf, "data/chipr_peaks.saf", quote = F, row.names = F, sep = "\t")
-# bam_files <- list.files("/scratch/Shares/rinn/JR/FIRRE_KO_TG_K27me3_CHIPSEQ/results_all_individual_runs/bwa/mergedLibrary/", pattern = ".bam$", full.names = T)
-# chipr_counts <- featureCounts(bam_files, 
-#                         annot.ext = "data/chipr_peaks.saf", 
-#                         isPairedEnd = TRUE, nthreads = 16)
-# write_rds(chipr_counts, "results/chipr_peak_counts.rds")
-# chipr_counts <- read_rds("results/chipr_peak_counts.rds")
-```
-
 # Creating smaples sheet matrix for Deseq
 ```{r Creating experimental matrix for Deseq of Firre induced vs cntrl K27me3 ChipSeq}
 
+# laoding in counts from feature counts (above)
+
+# test read in of .rds
+counts <- read_rds("results/merged_peak_counts.rds")
+
 # reading in counts for each peaks as matrix
 count_matrix <- counts$counts
+# counts matrix has 102,957 peaks (rows) and 16 cols for samples
 
 # reading in sample sheet
 samples <- read.csv("data/h3k27me3_firre_samplesheet.csv")
@@ -155,30 +185,25 @@ samples <- read.csv("data/h3k27me3_firre_samplesheet.csv")
 rownames(samples) <- samples$sample_id
 
 # checking everything is in order
-stopifnot(all(colnames(count_matrix) == samples$sample_id))
+stopifnot(all(colnames(count_matrix) == samples$bam_file))
 
-# changing col names
+# TODO the baove doesn't match so added col names to make it match 
+# changing col names to match with samples 
 colnames(count_matrix) <- samples$sample_id
 
+# checking everything is in order
+stopifnot(all(colnames(count_matrix) == samples$sample_id))
 
-#TODO delete?
-# Subset the count matrix to just the peaks in CHIPR optimal peaks
-# chipr_merged_peaks <- subsetByOverlaps(merged_peaks, chipr_peaks_gr)
-# chipr_merged_peaks_df <- chipr_merged_peaks %>% as.data.frame()
-# count_matrix <- count_matrix[chipr_merged_peaks_df$name,]
-
-
-# merging in needed data to samples for Deseq
+# merging fire_itg and timepoint values into new col called itg_timepoint
 samples <- samples %>% unite(itg_timepoint, firre_itg, timepoint, remove = FALSE)
 
-#TODO
-# setting samples to control?
+# making a new control col
 samples$condition <- "control"
 
-# setting inducd col values 
+# setting control col values to induced if == ITG_28 
 samples[samples$itg_timepoint == "ITG_48", "condition"] <- "induced"
 
-# Transgene induced
+# grabbing IP samples for 48hrs and then indexing the counts with those samples
 ip_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 ip_counts <- count_matrix[,ip_samples$sample_id]
 ```
@@ -188,10 +213,18 @@ ip_counts <- count_matrix[,ip_samples$sample_id]
 ```{r Running Deseq on condition of peaks based on Firre induction}
 
 # setting up experiment matrix
+# with out factoring firre_itg it's alphabetical
+# let's factor induced vs control 
+
+ip_samples$firre_itg <- factor(ip_samples$firre_itg, levels = c("CTL", "ITG"))
+
+# setting up deseq
 dds <- DESeqDataSetFromMatrix(countData = ip_counts,
                               colData = ip_samples,
                               design = ~ firre_itg)
+# run deseq
 dds <- DESeq(dds)
+
 # checking results
 resultsNames(dds)
 # removing intercept results by using "results" function to "grep" firre_itg ...
@@ -203,23 +236,25 @@ res_df <- res %>% as.data.frame()
 # filtering to only peaks that are sig differnet of P < 0.05
 sig <- res_df %>% filter(padj < 0.05)
 
-#TODO why -log10 space?
-# plotting mean vs fold change
+# plotting mean vs fold change (MA plot is typically log10)
 ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 
 # Plotting pval vs fold change
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ```
 ### Result: no significant peaks were found (P ~ .17 for the most sig)
+### Result: Firre induction did not increase or decrase K27me3 at 48hrs
 
 
-# Now testing each geneotype for sig peak differentces
+# Now just wild-type IP sampels for induced versus control at 28hrs
 ```{r comparing WT control versus firre induced for sig peaks via Deseq}
 
 # selecting just wt_ip samples and then indexing to get counts
 wt_ip_samples <- samples %>% filter(firre_ko == "WT", h3k27me3 == "IP")
 wt_ip_counts <- count_matrix[,wt_ip_samples$sample_id]
 
+# setting factor levels
+wt_ip_samples$condition <- factor(wt_ip_samples$condition, levels = c("control", "induced"))
 
 # Setting up Deseq design on 
 dds <- DESeqDataSetFromMatrix(countData = wt_ip_counts,
@@ -253,6 +288,9 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 ko_ip_samples <- samples %>% filter(firre_ko == "KO", h3k27me3 == "IP")
 ko_ip_counts <- count_matrix[,ko_ip_samples$sample_id]
 
+# factoring
+ko_ip_samples$condition <- factor(ko_ip_samples$condition, levels = c("control", "induced"))
+
 # setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = ko_ip_counts,
                               colData = ko_ip_samples,
@@ -283,7 +321,11 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 # 48 itg vs 0 itg filtering and getting counts
 itg_ip_samples <- samples %>% filter(h3k27me3 == "IP", firre_itg == "ITG")
 itg_ip_counts <- count_matrix[,itg_ip_samples$sample_id]
+
+# setting factors
 itg_ip_samples$timepoint <- factor(itg_ip_samples$timepoint, c("0", "48"))
+
+
 
 # setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = itg_ip_counts,
@@ -315,6 +357,8 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 # filtering to samples and indexing to get counts for peaks
 ctl_ip_samples <- samples %>% filter(h3k27me3 == "IP", firre_itg == "CTL")
 ctl_ip_counts <- count_matrix[,ctl_ip_samples$sample_id]
+
+# setting factors
 ctl_ip_samples$timepoint <- factor(ctl_ip_samples$timepoint, c("0", "48"))
 
 # setting up Deseq
@@ -349,6 +393,9 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 zero_samples <- samples %>% filter(h3k27me3 == "IP", condition == "control")
 zero_counts <- count_matrix[,zero_samples$sample_id]
 
+# setting factors to compare to wt
+zero_samples$firre_ko <- factor(zero_samples$firre_ko, c("WT", "KO"))
+
 # setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = zero_counts,
                               colData = zero_samples,
@@ -359,13 +406,25 @@ dds <- DESeq(dds)
 
 # filtering results and getting sig peaks
 resultsNames(dds)
-res <- results(dds, name = "firre_ko_WT_vs_KO")
+
+
+res <- results(dds, name = "firre_ko_KO_vs_WT")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
+
+# Plotting base mean vs fold change
+ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
+
+# plotting fold change versus pval
+ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+# HUH this shows that KO seems to have more k27me3
+
+
 
 # finding sig peaks with LFC > 2 fold up or down
 
 # loss of K27me3 in KO 
+### NOTE not sigificant they are fold change is happening 
 wt_vs_ko_k27me3_sig_down <- res_df %>% filter(log2FoldChange < -1)
 write_csv(wt_vs_ko_k27me3_sig_down, "results/wt_vs_ko_k27me3_sig_down.csv")
 
@@ -377,16 +436,16 @@ write_csv(wt_vs_ko_k27me3_sig_up, "results/wt_vs_ko_k27me3_sig_up.csv")
 all_wt_vs_ko_sig_k27me3 <- bind_rows(wt_vs_ko_k27me3_sig_up, wt_vs_ko_k27me3_sig_down)
 write_csv(all_wt_vs_ko_sig_k27me3, "results/all_wt_vs_ko_sig_k27me3.csv")
 
-# Plotting base mean vs fold change
-ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 
-# plotting fold change versus pval
-ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+# filter versus indexing == get to know it
+# filter likes a data frame and then can index into cols for logical tests
 
-
-
+# THIS IS THE WAY
 #TODO why is there a logical error with these types of indexing
-sig_threshold <- sig[filter(sig$log2FoldChange >= 1)]
+sig_threshold <- sig[(sig$log2FoldChange >= 1),]
+# NO sig peaks at this threshold 
+
+
 sig_threshold <- filter(sig[sig$log2FoldChange] >= -1)
 sig_x <- res_df %>%
   filter(abs(log2FoldChange > 1))
@@ -413,6 +472,9 @@ sig_threshold <- filter(sig$log2FoldChange <= -1)
 fortyeight_samples <- samples %>% filter(h3k27me3 == "IP", timepoint == 48)
 fortyeight_counts <- count_matrix[,fortyeight_samples$sample_id]
 
+# setting up factors
+fortyeight_samples$firre_ko <- factor(fortyeight_samples$firre_ko, c("WT", "KO"))
+
 # setting up Deseq
 dds <- DESeqDataSetFromMatrix(countData = fortyeight_counts,
                               colData = fortyeight_samples,
@@ -422,7 +484,7 @@ dds <- DESeq(dds)
 resultsNames(dds)
 
 # filtering to sig P < 0.05 peak differences
-res <- results(dds, name = "firre_ko_WT_vs_KO")
+res <- results(dds, name = "firre_ko_KO_vs_WT")
 res_df <- res %>% as.data.frame()
 sig <- res_df %>% filter(padj < 0.05)
 
@@ -434,6 +496,9 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 
 # plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
+
+#TODO check out this plot
+#TODO combined LRT linear model test
 ```
 ### Result: There is a global trend of less K27m3 in Firre KO lines
 ### Result: there are 116 sig down peaks > 2 fold -- but kinda  confusing  set up WT vs KO  0 time point is prob better
@@ -445,6 +510,7 @@ ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
 # selecting control lines and setting levels to WT and KO 
 ip_samples <- samples %>% filter(h3k27me3 == "IP", condition == "control")
 ip_counts <- count_matrix[,ip_samples$sample_id]
+
 ip_samples$firre_ko <- factor(ip_samples$firre_ko, levels = c("WT", "KO"))
 
 # Running Deseq
@@ -465,10 +531,9 @@ ggplot(res_df, aes(x = log10(baseMean), y = log2FoldChange)) + geom_point()
 
 # plotting fold change versus pval
 ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj))) + geom_point()
-
-#TODO check if direction could be switched (I don't think so but need to double check)
 ```
 ### Result: The first time we see increased K27me3 (check design WT/KO?)
+### AGain seeing KO has more k27me not sig 
 
 
 # Trying a combined model to determine peaks that are not in any dox control but in 
