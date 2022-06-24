@@ -28,13 +28,12 @@ thresh <- paste0("pval", pval_thresh)
 # ATAC seq was performed across the short time course (0 - 2.5 hours every 30 min)
 
 # Atac counts
-# 
 ```{r load, include=FALSE}
 
 # All needed ATACseq files : g2s, tpm, atac_samples, atac_counts, atac_consensus, tac_consensus_gr
 load("../01_setup/results/atacseq_data.RData", verbose = T)
 
-#TODO note atac_consensus is from the NF_CORE if any peak it is counted.
+# note atac_consensus is from the NF_CORE if any peak it is counted.
 # So consensus here means union of all peaks 
 # if peaks overlap the boundaries are determined by: union distance of start and stop
 # If two seperate peaks overlap one peak and are > 1bp apart they will be counted as two peaks.
@@ -216,11 +215,9 @@ save(atac_vszero_sig, file = "results/atac_vszero_sig.RData")
 
 ```{r loading in short time course combnined sig genes adn finding overlaps with their promoters}
 
-#TODO go over with Michael
 # Loading combined short time course sig genes 
 load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData", verbose = T)
      
-     # short_vszero_sig.RData
 # filtering to only atac peaks that are sig
 sig_atac_gr <- atac_consensus_gr[atac_consensus_gr$interval_id %in% unique(atac_vszero_sig$interval_id)]
 
@@ -557,12 +554,10 @@ ggsave("figures/firre_responder_atac_timing_heatmap_zscaled.pdf", height = 3.5, 
 #ATAC peaks that overlap any firre sig gene in all time courses
 ```{r ATAC overlaps with all firre sig genes in all time courses}
 
-#TODO start here 
+# loading in the atac seq results
 load("results/atacseq_firre_vs_control.RData", verbose = T)
 
-
-
-# All Firre responder genes
+# All Firre responder genes : loading in all time course sig genes (except combined long)
 load("../01_setup/results/rnaseq_data.RData", verbose = T)
 load("../08_combined_wt_ko_short_time_course/results/combined_short_vszero_sig.RData", verbose = T)
 load("../04_Firre_ko_long_time_course/results/ko_rescue_long_vszero_sig.RData", verbose = T)
@@ -671,8 +666,6 @@ ggplot(overlapping_df %>% filter(gene_name != "Firre", deg == TRUE), aes(x = dis
 
 # saving
 ggsave("figures/atac_peak_tss_density_all_fr_genes.pdf", height = 2, width = 2.5)
-
-length(overlapping_df)
 
 ```
 ### Result: only 10 more new peaks show up despite increasing from 30 to 526  firre responders across all time courses.
@@ -857,4 +850,4 @@ findOverlaps(pub_rap_peaks_gr, fr_promoters_gr)
 # No overlaps
 
 ```
-
+### Result: there is an overlap with PRDM14 and rap peaks from loyal -- also some other overlaps 
