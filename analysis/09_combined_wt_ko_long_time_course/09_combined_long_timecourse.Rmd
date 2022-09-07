@@ -56,9 +56,7 @@ if(!file.exists("results/combined_long_dox_controlled.RData")) {
   
   # running LRT for control lines
   combined_long_dds <- DESeq(combined_long_dds, test = "LRT", reduced = ~ firre_ko + firre_induced + timepoint)
-  
-  # Note this error occured
-  # 1 rows did not converge in beta, labelled in mcols(object)$fullBetaConv. Use larger maxit argument with nbinomLRT
+
   
   # Compile results
   res_names <- resultsNames(combined_long_dds)
@@ -106,7 +104,7 @@ load("results/combined_long_dox_controlled.RData", verbose = T)
 ```
 
 # Combined WT & KO  long time course Fold changes vs zero timepoint
-# Deseq model does not have dox ontrol line in it 
+# Deseq model does not have dox control line in it 
 
 ```{r Deseq combined WT and KO long time coruse versus 0 with out control line in model}
 
