@@ -55,8 +55,6 @@ if(!file.exists("results/short.RData")) {
                                       design = ~ firre_ko + firre_induced + timepoint + timepoint*firre_induced)
   short_dds <- DESeq(short_dds, test = "LRT", reduced = ~ firre_ko + firre_induced + timepoint)
   
-  # Note this error occured
-  # 1 rows did not converge in beta, labelled in mcols(object)$fullBetaConv. Use larger maxit argument with nbinomLRT
   
   # Compile results
   res_names <- resultsNames(short_dds)
@@ -433,3 +431,140 @@ draw(ht1)
 dev.off()
 draw(ht1)
 ```
+
+
+
+
+# DOX GENES
+# Short time course
+```{r combined WT and KO all timepoints no control line }
+if(!file.exists("results/combined_vs_zero.RData")) {
+  
+  dox_combined_vszero_samples <- samples %>%
+    filter(cell_type == "ESC",
+           firre_induced == "control")
+  dox_combined_vszero_counts <- salmon_gene_counts[,dox_combined_vszero_samples$sample_id]
+  
+  # Check ordering
+  stopifnot(all(rownames(dox_combined_vszero_samples) == colnames(dox_combined_vszero_counts)))
+  stopifnot(all(rownames(dox_combined_vszero_counts) == genes$gene_id))
+  
+  # DESeq2 -- model across all time points versus 0 timepoint
+  # NO LRT for dox controls 
+  dox_combined_vszero_dds <- DESeqDataSetFromMatrix(countData = dox_combined_vszero_counts,
+                                             colData = dox_combined_vszero_samples,
+                                             design = ~ firre_ko + timepoint)
+  dox_combined_vszero_dds <- DESeq(dox_combined_vszero_dds)
+  res_names <- resultsNames(dox_combined_vszero_dds)
+  
+  # getting result files
+  dox_vs_zero_res <- res_names[grepl("_vs_0", res_names)]
+  
+  # creating shrunken lfc 
+  dox_combined_vszero_shrnklfc <- lapply(dox_vs_zero_res, function(x) {
+    lfcShrink(dox_combined_vszero_dds, 
+              coef = x,
+              type = "apeglm") %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+  }) %>% bind_rows()
+  
+  # saving 
+  save(dox_combined_vszero_shrnklfc, file = "results/dox_combined_vs_zero_all_time_points.RData")
+}
+```
+
+# Sig dox genes
+
+```{r}
+
+short_dox_sig <- dox_combined_vszero_shrnklfc %>% 
+  filter(padj <= pval_thresh)
+
+# Those genes that were in the combined short versus 0 sig genes
+# Those genes that are also in the dox control line
+dox_short_vszero_sig <- dox_combined_vszero_shrnklfc %>%
+  filter(gene_id %in% short_dox_sig$gene_id)
+
+# determining max fold change 
+dox_short_vszero_maxfc <- dox_short_vszero_sig %>%
+  group_by(gene_id) %>%
+  summarize(max_fc = max(abs(log2FoldChange))) 
+
+# merging in new col for max fold change with short_vszero_sig
+dox_short_vszero_sig <- dox_short_vszero_sig %>%
+  left_join(dox_short_vszero_maxfc)
+
+# filtering on threshold
+dox_short_vszero_sig <- dox_short_vszero_sig %>%
+  filter(max_fc > l2fc_thresh)
+
+# saving results
+save(dox_short_vszero_sig, file = "results/dox_combined_short_vszero_sig.RData")
+
+
+
+```
+
+
+
+
+# FINDING SIG DOX GENES combined model
+
+
+```{r}
+dox_sig_combined_vs_zero <- dox_combined_vszero_shrnklfc %>% filter(gene_id %in% unique(dox_short_vszero_sig$gene_id))
+deseq_res <- sig_combined_vs_zero
+genes_to_include <- unique(sig_combined_vs_zero$gene_id)
+
+# Let's plot the downregulated genes separately
+ deg <- deseq_res %>%
+    filter(gene_id %in% genes_to_include) %>%
+    dplyr::select(gene_id, gene_name, baseMean, log2FoldChange, timepoint)
+  
+  # Add a zero timepoint
+  deg_zero <- deg %>%
+    dplyr::select(gene_id, gene_name, baseMean) %>%
+    distinct() %>%
+    mutate(log2FoldChange = 0,
+           timepoint = 0) 
+  
+  deg <- deg %>%
+    bind_rows(deg_zero)
+  
+  # proving information of up and down and max fold change 
+  num_deg <- deg  %>%
+    group_by(gene_id) %>%
+    summarize(max_fc = log2FoldChange[which.max(abs(log2FoldChange))]) %>%
+    mutate(direction = ifelse(max_fc > 0, "up", "down")) %>%
+    group_by(direction) %>%
+    summarize(num_deg = length(unique(gene_id)))
+  
+  label_x <- max(deg$timepoint / 2)
+  
+  # Let's sort on the order of fold-change
+  deg_fc <- deg %>%
+    group_by(gene_name) %>%
+    summarize(max_fc = log2FoldChange[which.max(abs(log2FoldChange))]) %>%
+    arrange(-max_fc)
+  
+  deg$gene_name <- factor(deg$gene_name, levels = deg_fc$gene_name)
+  
+  # Plotting each gene seperately across all time points
+  g1 <- ggplot(deg, aes(x = timepoint, y = log2FoldChange, group = gene_id)) +
+    geom_hline(yintercept = 0) +
+    geom_line(alpha = 0.2, color = "gray70") +
+    geom_point(alpha = 0.4) +
+    facet_wrap(~gene_name, scales = "free_y") +
+    scale_x_continuous(breaks = c(0,330, 720, 1440, 2880, 5670), labels = c("0", "5.5", "12","24", "48","96") )
+  show(g1)
+
+  # Saving
+ggsave("figures/short_and_long_individual_fc_profiles.pdf",
+       height = 4.5, width = 6.5)
+```
+
+

@@ -37,9 +37,12 @@ load("../01_setup/results/rnaseq_data.RData", verbose = T)
 if(!file.exists("results/combined_long_dox_controlled.RData")) {
   
   # Filter to short timecourse both WT and KO
-  long_samples <- samples %>%
-    filter(cell_type == "ESC",
-           timecourse_length == "long")
+  # long_samples <- samples %>%
+  #   filter(cell_type == "ESC",
+  #          timecourse_length == "long")
+  
+    long_samples <- samples %>%
+    filter(cell_type == "ESC")
   
   # getting salmoon counts for Deseeq
  long_counts <- salmon_gene_counts[,long_samples$sample_id]
@@ -52,10 +55,10 @@ if(!file.exists("results/combined_long_dox_controlled.RData")) {
   # LRT for dox control performed here
   combined_long_dds <- DESeqDataSetFromMatrix(countData = long_counts, 
                                       colData = long_samples, 
-                                      design = ~ firre_ko + firre_induced + timepoint + timepoint*firre_induced)
+                                      design = ~ timecourse_length + firre_ko + firre_induced + timepoint + timepoint*firre_induced)
   
   # running LRT for control lines
-  combined_long_dds <- DESeq(combined_long_dds, test = "LRT", reduced = ~ firre_ko + firre_induced + timepoint)
+  combined_long_dds <- DESeq(combined_long_dds, test = "LRT", reduced = ~ timecourse_length + firre_ko + firre_induced + timepoint)
 
   
   # Compile results
@@ -101,6 +104,13 @@ if(!file.exists("results/combined_long_dox_controlled.RData")) {
 }
 
 load("results/combined_long_dox_controlled.RData", verbose = T)
+
+# look at sig
+sig_combined_long_dox_controlled <- combined_long_lfc %>%
+  filter(padj < 0.05)
+
+length(unique(sig_combined_long_dox_controlled$gene_id))
+
 ```
 
 # Combined WT & KO  long time course Fold changes vs zero timepoint
