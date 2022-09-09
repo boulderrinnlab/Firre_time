@@ -479,10 +479,33 @@ if(!file.exists("results/combined_vs_zero.RData")) {
 
 # Sig dox genes
 
+
+
 ```{r}
 
-short_dox_sig <- dox_combined_vszero_shrnklfc %>% 
+all_dox_sig <- dox_combined_vszero_shrnklfc %>% 
   filter(padj <= pval_thresh)
+
+all_dox_sig <- dox_combined_vszero_shrnklfc %>%
+  group_by(gene_id) %>%
+  summarize(max_fc = max(abs(log2FoldChange))) 
+
+all_dox_sig <- all_dox_sig %>%
+  filter(max_fc > l2fc_thresh)
+
+all_dox_sig <- left_join(all_dox_sig, g2s)
+
+all_dox_sig <- merge(all_dox_sig, dox_combined_vszero_shrnklfc$padj )
+
+all_dox_sig <- dox_combined_vszero_shrnklfc[dox_short_vszero_maxfc$gene_id,]
+  
+
+length(unique(all_dox_sig$gene_id))
+
+# up
+
+
+
 
 # Those genes that were in the combined short versus 0 sig genes
 # Those genes that are also in the dox control line
