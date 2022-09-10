@@ -88,23 +88,35 @@ if(!file.exists("results/short.RData")) {
 short_dox_sig <- short_shrnklfc %>% 
   filter(padj <= pval_thresh)
 
-# Those genes that were in the combined short versus 0 sig genes
-# Those genes that are also in the dox control line
-short_vszero_sig <- short_vszero_shrnklfc %>%
-  filter(gene_id %in% short_dox_sig$gene_id)
 
 # determining max fold change 
-short_vszero_maxfc <- short_vszero_sig %>%
+short_dox_sig <- short_dox_sig %>%
   group_by(gene_id) %>%
   summarize(max_fc = max(abs(log2FoldChange))) 
+
+# filtering on threshold
+short_dox_sig <- short_dox_sig %>%
+  filter(max_fc > l2fc_thresh)
+
+short_dox_sig <- merge(short_dox_sig, g2s)
+
+
+
+
+
+
+# Those genes that were in the combined short versus 0 sig genes
+# Those genes that are also in the dox control line
+dox_short_sig <- short_vszero_shrnklfc %>%
+  filter(gene_id %in% short_dox_sig$gene_id)
+
+
 
 # merging in new col for max fold change with short_vszero_sig
 short_vszero_sig <- short_vszero_sig %>%
   left_join(short_vszero_maxfc)
 
-# filtering on threshold
-short_vszero_sig <- short_vszero_sig %>%
-  filter(max_fc > l2fc_thresh)
+
 
 # saving results
 save(short_vszero_sig, file = "results/combined_short_vszero_sig.RData")
