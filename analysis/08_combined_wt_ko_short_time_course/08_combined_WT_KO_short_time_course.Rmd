@@ -33,7 +33,7 @@ load("../01_setup/results/rnaseq_data.RData", verbose = T)
 # That will account for both genotype, dox and timepoint
 ### results will be saved as "short_combined_dox_controlled.RData"
 
-```{r long_timecourse}
+```{r short_full_model_timecourse}
 if(!file.exists("results/short.RData")) {
   
   # Filter to short timecourse both WT and KO

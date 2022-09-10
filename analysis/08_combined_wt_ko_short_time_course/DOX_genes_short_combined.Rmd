@@ -1,0 +1,113 @@
+---
+title: "DOX_GENES"
+author: "JR"
+date: "9/10/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r load, include=FALSE}
+load("../01_setup/results/rnaseq_data.RData", verbose = T)
+```
+
+# Here we are combining the WT and KO Firre transgene lines in a model
+# That will account for both genotype, dox and timepoint
+### results will be saved as "short_combined_dox_controlled.RData"
+
+```{r short_full_model_timecourse}
+if(!file.exists("results/short.RData")) {
+  
+  # Filter to short timecourse both WT and KO
+  dox_short_samples <- samples %>%
+    filter(cell_type == "ESC",
+           timecourse_length == "short",
+           firre_induced == "control")
+  
+  # getting salmoon counts for Deseeq
+  dox_short_counts <- salmon_gene_counts[,dox_short_samples$sample_id]
+  
+  # Check ordering
+  stopifnot(all(rownames(dox_short_samples) == colnames(dox_short_counts)))
+  stopifnot(all(rownames(dox_short_counts) == genes$gene_id))
+  
+  # DESeq2 -- controlling for doxycycline; likelihood ratio test
+  # LRT for dox control performed here
+  dox_short_dds <- DESeqDataSetFromMatrix(countData = dox_short_counts, 
+                                      colData = dox_short_samples, 
+                                      design = ~ firre_ko + timepoint + timepoint*firre_ko)
+  dox_short_dds <- DESeq(dox_short_dds, test = "LRT", reduced = ~ firre_ko + timepoint)
+  
+  
+  # Compile results
+  res_names <- resultsNames(dox_short_dds)
+  
+  # grabbing just the Deseq results we want
+  dynamic_res <- res_names[grepl(".timepoint", res_names)]
+  
+  # cleaning up each result file
+  short_lfc <- lapply(dynamic_res, function(x) {
+    results(dox_short_dds, 
+            name = x) %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
+  }) %>% bind_rows()
+  
+  # Shrunken LFC results
+  short_shrnklfc <- lapply(dynamic_res, function(x) {
+    lfcShrink(dox_short_dds, 
+              coef = x,
+              type = "apeglm") %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
+  }) %>% bind_rows()
+  
+  # Calculate the maximum fold-change in any one timepoint
+  short_maxfc <- short_shrnklfc %>%
+    group_by(gene_id) %>%
+    summarize(max_fc = max(abs(log2FoldChange))) 
+  
+  # merge max shrnklfc into dataframe
+  short_shrnklfc <- short_shrnklfc %>%
+    left_join(short_maxfc)
+  
+  # saving
+  save(short_lfc, short_shrnklfc, file = "results/short_combined_dox_controlled.RData")
+}
+```
+
+# Dox sig genes short combined
+```{r}
+
+short_dox_sig <- short_shrnklfc %>% 
+  filter(padj <= pval_thresh)
+
+# Those genes that were in the combined short versus 0 sig genes
+# Those genes that are also in the dox control line
+short_vszero_sig <- short_vszero_shrnklfc %>%
+  filter(gene_id %in% short_dox_sig$gene_id)
+
+# determining max fold change 
+short_vszero_maxfc <- short_vszero_sig %>%
+  group_by(gene_id) %>%
+  summarize(max_fc = max(abs(log2FoldChange))) 
+
+# merging in new col for max fold change with short_vszero_sig
+short_vszero_sig <- short_vszero_sig %>%
+  left_join(short_vszero_maxfc)
+
+# filtering on threshold
+short_vszero_sig <- short_vszero_sig %>%
+  filter(max_fc > l2fc_thresh)
+
+# saving results
+save(short_vszero_sig, file = "results/combined_short_vszero_sig.RData")
+
+```
+
