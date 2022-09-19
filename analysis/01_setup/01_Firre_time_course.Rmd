@@ -31,7 +31,7 @@ Major results:
 
 ```{r load, include=FALSE}
 
-load("../01_setup/results/rnaseq_data.RData")
+load("../01_setup/results/rnaseq_data.RData", verbose = T)
 
 ```
 
