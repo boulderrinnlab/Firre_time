@@ -263,6 +263,7 @@ ko_dox_short_samples$timepoint
   }) %>% bind_rows()
   
   # Shrunken LFC results
+  ### WARNING RUN TIME LONG ####
   ko_dox_short_shrnklfc <- lapply(dynamic_res, function(x) {
     lfcShrink(ko_dox_short_dds, 
               coef = x,
@@ -293,23 +294,23 @@ ko_dox_short_samples$timepoint
 
 ```
 
-# Plotting 
+# Plotting ko dox genes
 
 ```{r}
  # changing lfc col name
-short_vszero_sig <- short_vszero_sig %>%
+ko_dox_short_vszero_sig <- short_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
 
 # Plotting
 make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
-                         genes_to_include = unique(short_vszero_sig$gene_id),
+                         genes_to_include = unique(ko_dox_short_vszero_sig$gene_id),
                          y_lim = c(-6,6),
                          draw_plot = FALSE)
 
-ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
+ggsave(paste0("figures/ko_dox_short_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 
-dox_genes_combined_short <-unique(short_vszero_sig$gene_name)
+ko_dox_short <-unique(ko_dox_short_vszero_sig$gene_name)
 
 
 
