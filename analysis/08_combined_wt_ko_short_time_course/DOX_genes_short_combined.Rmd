@@ -223,6 +223,7 @@ dox_genes_combined_short <-unique(short_vszero_sig$gene_name)
            firre_ko == "KO")
 
 # TODO why are all the time points here ?
+# Because it's a factor in the larger data set
 ko_dox_short_samples$timepoint
 
   
@@ -240,7 +241,7 @@ ko_dox_short_samples$timepoint
                                       design = ~ timepoint)
   
   # running Deseq LRT
-  dox_short_dds <- DESeq(ko_dox_short_dds)
+  ko_dox_short_dds <- DESeq(ko_dox_short_dds)
   
   #TODO no result names
 
@@ -248,7 +249,7 @@ ko_dox_short_samples$timepoint
   res_names <- resultsNames(ko_dox_short_dds)
   
   # grabbing just the Deseq results we want
-  dynamic_res <- res_names[grepl(".timepoint", res_names)]
+  dynamic_res <- res_names[grepl("timepoint", res_names)]
   
   # cleaning up each result file
   ko_dox_short_lfc <- lapply(dynamic_res, function(x) {
@@ -262,8 +263,8 @@ ko_dox_short_samples$timepoint
   }) %>% bind_rows()
   
   # Shrunken LFC results
-  short_shrnklfc <- lapply(dynamic_res, function(x) {
-    lfcShrink(dox_short_dds, 
+  ko_dox_short_shrnklfc <- lapply(dynamic_res, function(x) {
+    lfcShrink(ko_dox_short_dds, 
               coef = x,
               type = "apeglm") %>%
       as.data.frame() %>%
@@ -274,21 +275,43 @@ ko_dox_short_samples$timepoint
   }) %>% bind_rows()
   
   # Calculate the maximum fold-change in any one timepoint
-  short_maxfc <- short_shrnklfc %>%
+  ko_dox_short_maxfc <- ko_dox_short_shrnklfc %>%
     group_by(gene_id) %>%
     summarize(max_fc = max(abs(log2FoldChange))) 
   
   # merge max shrnklfc into dataframe
-  short_shrnklfc <- short_shrnklfc %>%
-    left_join(short_maxfc)
+  ko_dox_short_shrnklfc <- ko_dox_short_shrnklfc %>%
+    left_join(ko_dox_short_maxfc)
   
   # saving
-  save(short_lfc, short_shrnklfc, file = "results/short_combined_dox_controlled.RData")
+  save(ko_dox_short_lfc, ko_dox_short_shrnklfc, file = "results/ko_dox_short.RData")
 
 
 
 # TODO how to make heat map 
   # guessing [] index into counts of sig genes - make matrix - scale - heatmap
+
+```
+
+# Plotting 
+
+```{r}
+ # changing lfc col name
+short_vszero_sig <- short_vszero_sig %>%
+  mutate(l2fc_shrunken = log2FoldChange)
+
+# Plotting
+make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
+                         genes_to_include = unique(short_vszero_sig$gene_id),
+                         y_lim = c(-6,6),
+                         draw_plot = FALSE)
+
+ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
+       height = 3, width = 3.5, useDingbats = FALSE)
+
+dox_genes_combined_short <-unique(short_vszero_sig$gene_name)
+
+
 
 ```
 
