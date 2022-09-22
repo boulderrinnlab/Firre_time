@@ -182,6 +182,8 @@ esc_wt_control_short <- esc_wt_control_short %>%
 
 esc_wt_control_short_sig <- esc_wt_control_short %>% 
   filter(sig == TRUE)
+
+
 ```
 
 # Plotting wt control short time course sig dox genes 
@@ -195,6 +197,7 @@ make_timecourse_lfc_plot(deseq_res = esc_wt_control_short,
 #        height = 3, width = 3.5, useDingbats = FALSE)
 ```
 ### Result: again short time course is many fewer genes due to dox effects
+### Result: WT has more changes due to dox 63 vs 7 in K0 short
 
 
 
