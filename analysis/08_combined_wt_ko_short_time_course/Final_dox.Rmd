@@ -22,46 +22,46 @@ load("../01_setup/results/rnaseq_data.RData", verbose = T)
 #TODO what are we really doing with this versus 0 :) 
 
 # calling out samples for control WT and KO RNAseq (Firre not induced)
-  control_vszero_samples <- samples %>%
-    filter(cell_type == "ESC",
-           firre_induced == "control")
-  
-  # getting salmon counts for Deseq
-  control_vszero_counts <- salmon_gene_counts[,control_vszero_samples$sample_id]
-  
-  # Check ordering
-  stopifnot(all(rownames(control_vszero_samples) == colnames(control_vszero_counts)))
-  stopifnot(all(rownames(control_vszero_counts) == genes$gene_id))
-  
-  # DESeq2 -- model for both genotypes and time but not conrol line LRT test
-  # NO LRT test 
+control_vszero_samples <- samples %>%
+  filter(cell_type == "ESC",
+         firre_induced == "control")
+
+# getting salmon counts for Deseq
+control_vszero_counts <- salmon_gene_counts[,control_vszero_samples$sample_id]
+
+# Check ordering
+stopifnot(all(rownames(control_vszero_samples) == colnames(control_vszero_counts)))
+stopifnot(all(rownames(control_vszero_counts) == genes$gene_id))
+
+# DESeq2 -- model for both genotypes and time but not conrol line LRT test
+# NO LRT test 
 control_vszero_dds <- DESeqDataSetFromMatrix(countData = control_vszero_counts,
                                              colData = control_vszero_samples,
                                              design = ~ firre_ko + timepoint)
-  # run Deseq
-  control_vszero_dds <- DESeq(control_vszero_dds)
-  
-  # checking result names for selection following
-  res_names <- resultsNames(control_vszero_dds)
-  
+# run Deseq
+control_vszero_dds <- DESeq(control_vszero_dds)
+
+# checking result names for selection following
+res_names <- resultsNames(control_vszero_dds)
+
 # cleaning up result files & converting to shrnkLFC 
-  # grabbing relevenat results
-  vs_zero_res <- res_names[grepl("_vs_0", res_names)]
-  
-  # applying shrnkl
-  control_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
-    lfcShrink(control_vszero_dds, 
-              coef = x,
-              type = "apeglm") %>%
-      as.data.frame() %>%
-      rownames_to_column("gene_id") %>% 
-      merge(g2s) %>%
-      mutate(result_name = x,
-             timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
-  }) %>% bind_rows()
- 
-  # saving
-  save(control_vszero_shrnklfc, file = "final_dox_results/dox_control_combined_vs_zero.RData")
+# grabbing relevenat results
+vs_zero_res <- res_names[grepl("_vs_0", res_names)]
+
+# applying shrnkl
+control_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
+  lfcShrink(control_vszero_dds, 
+            coef = x,
+            type = "apeglm") %>%
+    as.data.frame() %>%
+    rownames_to_column("gene_id") %>% 
+    merge(g2s) %>%
+    mutate(result_name = x,
+           timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+}) %>% bind_rows()
+
+# saving
+save(control_vszero_shrnklfc, file = "final_dox_results/dox_control_combined_vs_zero.RData")
 
 
 load("final_dox_results/dox_control_combined_vs_zero.RData", verbose = T)
@@ -127,7 +127,7 @@ save(control_vszero_sig, file = "final_dox_results/dox_combined_control_vszero_s
 # Plotting 
 
 ```{r}
- # changing lfc col name
+# changing lfc col name
 control_vszero_sig <- control_vszero_sig %>%
   mutate(l2fc_shrunken = log2FoldChange)
 
@@ -147,22 +147,57 @@ dox_genes_combined_control <-unique(control_vszero_sig$gene_name)
 ```
 
 # If want to use LRT here is the shrunken log fold change data:
- # saving
- # save(control_dox_shrnklfc,  control_dox_dds, file = "results/control_dox.RData")
+# saving
+# save(control_dox_shrnklfc,  control_dox_dds, file = "results/control_dox.RData")
 # TODO use LRT?
 
 ```{r}
 load("results/control_dox.RData", verbose = T)
 
 # The data above was done with this LRT:
- # LRT for all 
-  control_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
-                                      colData = control_dox_samples, 
-                                      design = ~firre_ko + timepoint)
-  
-  
-  control_dox_dds <- DESeq(control_dox_dds, test = "LRT", reduced = ~ firre_ko)
+# LRT for all 
+control_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
+                                          colData = control_dox_samples, 
+                                          design = ~firre_ko + timepoint)
+
+
+control_dox_dds <- DESeq(control_dox_dds, test = "LRT", reduced = ~ firre_ko)
 ```
+
+
+```{r}
+
+control_vs_zero_mat <- control_vszero_sig %>%
+  left_join(g2s) %>%
+  dplyr::select(gene_name, log2FoldChange, timepoint) %>%
+  pivot_wider(names_from = "timepoint", names_sort = TRUE, values_from = "log2FoldChange") %>%
+  column_to_rownames("gene_name") %>%
+  as.matrix()
+pheatmap::pheatmap(control_vs_zero_mat, cluster_cols = F, show_rownames = TRUE,
+                   cutree_rows = 5)
+
+cat(unique(control_vszero_sig$gene_id))
+```
+
+```{r}
+#TODO: consider re-running DESeq2 with timecourse_length in model 
+# COuld try either in the LRT(initial model) or for viz vs_zero test.
+# For ex.
+control_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
+                                          colData = control_dox_samples, 
+                                          design = ~firre_ko + timecourse_length + timepoint)
+
+
+control_dox_dds <- DESeq(control_dox_dds, test = "LRT", reduced = ~ firre_ko + timecourse_length)
+# AND/OR
+control_vszero_dds <- DESeqDataSetFromMatrix(countData = control_vszero_counts,
+                                             colData = control_vszero_samples,
+                                             design = ~ firre_ko + timecourse_length + timepoint)
+control_vszero_dds <- DESeq(control_vszero_dds)
+
+```
+
+
 
 
 
