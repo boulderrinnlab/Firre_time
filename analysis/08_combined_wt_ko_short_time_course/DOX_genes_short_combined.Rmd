@@ -512,19 +512,23 @@ ggsave(paste0("figures/mega_dox_lfc_", thresh, ".pdf"),
   
   
   # Calculate the maximum fold-change in any one timepoint
-  ko_dox_short_maxfc <- ko_dox_short_shrnklfc %>%
+  control_dox_maxfc <- ko_dox_short_shrnklfc %>%
     group_by(gene_id) %>%
     summarize(max_fc = max(abs(log2FoldChange))) 
   
   # merge max shrnklfc into dataframe
-  ko_dox_short_shrnklfc <- ko_dox_short_shrnklfc %>%
-    left_join(ko_dox_short_maxfc)
+  control_dox_shrnklfc <- control_dox_shrnklfc %>%
+    left_join(control_dox_maxfc)
   
   # saving
   save(control_dox_shrnklfc,  control_dox_dds, file = "results/control_dox.RData")
 
+```
 
 
+# PLOT all control dox genes 
+
+```{r}
 
 ```
 
