@@ -211,7 +211,7 @@ dox_genes_combined_short <-unique(short_vszero_sig$gene_name)
 ```
 
 
-# Short Dox KO genes (now doing seperate in each background)
+# Short Dox KO genes (now doing both genotypes)
 
 
 ```{r}
@@ -219,11 +219,9 @@ dox_genes_combined_short <-unique(short_vszero_sig$gene_name)
   ko_dox_short_samples <- samples %>%
     filter(cell_type == "ESC",
            timecourse_length == "short",
-           firre_induced == "control",
-           firre_ko == "KO")
+           firre_induced == "control")
 
-# TODO why are all the time points here ?
-# Because it's a factor in the larger data set
+#TODO factor this to just be short_all
 ko_dox_short_samples$timepoint
 
   
@@ -236,15 +234,14 @@ ko_dox_short_samples$timepoint
   
   # DESeq2 -- controlling for doxycycline; likelihood ratio test
   # LRT for dox control performed here
+  #TODO do LRT with genotype
   ko_dox_short_dds <- DESeqDataSetFromMatrix(countData = ko_dox_short_counts, 
                                       colData = ko_dox_short_samples, 
                                       design = ~ timepoint)
   
-  # running Deseq LRT
+  # running Deseq without LRT
   ko_dox_short_dds <- DESeq(ko_dox_short_dds)
-  
-  #TODO no result names
-
+ 
   # Compile results
   res_names <- resultsNames(ko_dox_short_dds)
   
@@ -294,6 +291,15 @@ ko_dox_short_samples$timepoint
 
 ```
 
+
+Runnning all short with LRT 
+```{r}
+## NOTE FROM MICHAEL: library(testit) assert is the same as stopifnot. **
+
+ko_dox_short_dds <- DESeq(dox_short_dds, test = "LRT", reduced = ~ 1)
+
+```
+
 # Plotting ko dox genes
 
 ```{r}
@@ -310,11 +316,148 @@ make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
 ggsave(paste0("figures/ko_dox_short_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 
-ko_dox_short <-unique(ko_dox_short_vszero_sig$gene_name)
+t <-unique(ko_dox_short_vszero_sig$gene_name)
 
 
 
 ```
 
 
+
+##### NOW THE MEGA MODEL ALL TIME AND GENOTYPES
+### WITH LRT to control for firre induced 
+```{r}
+
+ # Filter to short timecourse both WT and KO
+  mega_dox_samples <- samples %>%
+    filter(cell_type == "ESC")
+
+  
+  # getting salmoon counts for Deseeq
+  mega_dox_counts <- salmon_gene_counts[,mega_dox_samples$sample_id]
+  
+  # Check ordering
+  stopifnot(all(rownames(mega_dox_samples) == colnames(mega_dox_counts)))
+  stopifnot(all(rownames(mega_dox_counts) == genes$gene_id))
+  
+  # LRT for all 
+  mega_dox_dds <- DESeqDataSetFromMatrix(countData = mega_dox_counts, 
+                                      colData = mega_dox_samples, 
+                                      design = ~firre_ko + firre_induced + timepoint)
+  
+  
+  mega_dox_dds <- DESeq(mega_dox_dds, test = "LRT", reduced = ~ firre_ko + firre_induced)
+
+ 
+  # Compile results
+  res_names <- resultsNames(mega_dox_dds)
+  
+  # grabbing just the Deseq results we want
+  dynamic_res <- res_names[grepl("timepoint_", res_names)]
+  
+
+  
+  # cleaning up each result file
+  mega_dox_lfc <- lapply(dynamic_res, function(x) {
+    results(mega_dox_dds, 
+            name = x) %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+  }) %>% bind_rows()
+  
+    mega_dox_maxfc <- mega_dox_lfc %>%
+    group_by(gene_id) %>%
+    summarize(max_fc = max(abs(log2FoldChange))) 
+
+    summary(mega_dox_maxfc)
+    
+    
+    mega_dox_lfc <- mega_dox_lfc %>%
+      left_join(mega_dox_maxfc)
+sig_mega_dox_lfc <- mega_dox_lfc %>%
+  filter(padj < 0.05, max_fc > 2)
+
+  make_timecourse_lfc_plot(deseq_res = mega_dox_lfc,
+                         genes_to_include = unique(sig_mega_dox_lfc$gene_id),
+                         y_lim = c(-6,6),
+                         lfc_type = "log2FoldChange",
+                         draw_plot = TRUE)
+
+
+
+ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
+       height = 3, width = 3.5, useDingbats = FALSE)
+
+# saving
+  save(mega_dox_lfc, mega_dox_dds, file = "results/mega_dox.RData")
+
+
+
+
+```
+
+
+
+##### Just control lines all timepoints
+```{r}
+
+ # Filter to short timecourse both WT and KO
+  control_dox_samples <- samples %>%
+    filter(cell_type == "ESC", 
+           firre_induced == "control")
+
+  
+  # getting salmoon counts for Deseeq
+  control_dox_counts <- salmon_gene_counts[,control_dox_samples$sample_id]
+  
+  # Check ordering
+  stopifnot(all(rownames(control_dox_samples) == colnames(control_dox_counts)))
+  stopifnot(all(rownames(control_dox_counts) == genes$gene_id))
+  
+  # LRT for all 
+  mega_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
+                                      colData = control_dox_samples, 
+                                      design = ~firre_ko + timepoint)
+  
+  
+  mega_dox_dds <- DESeq(mega_dox_dds, test = "LRT", reduced = ~ firre_ko)
+
+ 
+  # Compile results
+  res_names <- resultsNames(control_dox_dds)
+  
+  # grabbing just the Deseq results we want
+  dynamic_res <- res_names[grepl("timepoint", res_names)]
+  
+  # cleaning up each result file
+  mega_dox_lfc <- lapply(dynamic_res, function(x) {
+    results(mega_dox_dds, 
+            name = x) %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
+  }) %>% bind_rows()
+  
+  
+  # Calculate the maximum fold-change in any one timepoint
+  ko_dox_short_maxfc <- ko_dox_short_shrnklfc %>%
+    group_by(gene_id) %>%
+    summarize(max_fc = max(abs(log2FoldChange))) 
+  
+  # merge max shrnklfc into dataframe
+  ko_dox_short_shrnklfc <- ko_dox_short_shrnklfc %>%
+    left_join(ko_dox_short_maxfc)
+  
+  # saving
+  save(ko_dox_short_lfc, ko_dox_short_shrnklfc, file = "results/ko_dox_short.RData")
+
+
+
+
+```
 
