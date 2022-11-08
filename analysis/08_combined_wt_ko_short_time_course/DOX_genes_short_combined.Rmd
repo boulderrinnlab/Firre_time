@@ -355,8 +355,6 @@ t <-unique(ko_dox_short_vszero_sig$gene_name)
   # grabbing just the Deseq results we want
   dynamic_res <- res_names[grepl("timepoint_", res_names)]
   
-
-  
   # cleaning up each result file
   mega_dox_lfc <- lapply(dynamic_res, function(x) {
     results(mega_dox_dds, 
@@ -372,7 +370,28 @@ t <-unique(ko_dox_short_vszero_sig$gene_name)
     group_by(gene_id) %>%
     summarize(max_fc = max(abs(log2FoldChange))) 
 
-    summary(mega_dox_maxfc)
+    
+    #TODO Shrunken LFC
+    ### WARNING RUN TIME LONG ####
+  mega_dox_shrnklfc <- lapply(dynamic_res, function(x) {
+    lfcShrink(mega_dox_dds, 
+              coef = x,
+              type = "apeglm") %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             #TODO why result name
+             ttimepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+  }) %>% bind_rows()
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     mega_dox_lfc <- mega_dox_lfc %>%
@@ -418,12 +437,12 @@ ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
   stopifnot(all(rownames(control_dox_counts) == genes$gene_id))
   
   # LRT for all 
-  mega_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
+  control_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
                                       colData = control_dox_samples, 
                                       design = ~firre_ko + timepoint)
   
   
-  mega_dox_dds <- DESeq(mega_dox_dds, test = "LRT", reduced = ~ firre_ko)
+  control_dox_dds <- DESeq(mega_dox_dds, test = "LRT", reduced = ~ firre_ko)
 
  
   # Compile results
