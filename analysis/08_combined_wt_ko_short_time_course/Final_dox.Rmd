@@ -1,0 +1,168 @@
+---
+title: "Final_dox"
+author: "JR"
+date: "11/8/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Laoding in Rnaseq data for all samples in mESCs and NPCs
+```{r load, include=FALSE}
+load("../01_setup/results/rnaseq_data.RData", verbose = T)
+```
+
+# First we are going to do a differential expression versus 0 time point
+# We will use all contorl lines that don't induce firre
+
+
+```{R }
+
+#TODO what are we really doing with this versus 0 :) 
+
+# calling out samples for control WT and KO RNAseq (Firre not induced)
+  control_vszero_samples <- samples %>%
+    filter(cell_type == "ESC",
+           firre_induced == "control")
+  
+  # getting salmon counts for Deseq
+  control_vszero_counts <- salmon_gene_counts[,control_vszero_samples$sample_id]
+  
+  # Check ordering
+  stopifnot(all(rownames(control_vszero_samples) == colnames(control_vszero_counts)))
+  stopifnot(all(rownames(control_vszero_counts) == genes$gene_id))
+  
+  # DESeq2 -- model for both genotypes and time but not conrol line LRT test
+  # NO LRT test 
+control_vszero_dds <- DESeqDataSetFromMatrix(countData = control_vszero_counts,
+                                             colData = control_vszero_samples,
+                                             design = ~ firre_ko + timepoint)
+  # run Deseq
+  control_vszero_dds <- DESeq(control_vszero_dds)
+  
+  # checking result names for selection following
+  res_names <- resultsNames(control_vszero_dds)
+  
+# cleaning up result files & converting to shrnkLFC 
+  # grabbing relevenat results
+  vs_zero_res <- res_names[grepl("_vs_0", res_names)]
+  
+  # applying shrnkl
+  control_vszero_shrnklfc <- lapply(vs_zero_res, function(x) {
+    lfcShrink(control_vszero_dds, 
+              coef = x,
+              type = "apeglm") %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+  }) %>% bind_rows()
+ 
+  # saving
+  save(control_vszero_shrnklfc, file = "final_dox_results/dox_control_combined_vs_zero.RData")
+
+
+load("final_dox_results/dox_control_combined_vs_zero.RData", verbose = T)
+
+```
+
+# Dox sig genes control samples
+# Now we will filter to significant genes 
+```{r}
+control_dox_sig <- control_vszero_shrnklfc %>% 
+  filter(padj <= 0.01)
+
+
+# determining max fold change 
+control_dox_sig <- control_dox_sig %>%
+  group_by(gene_id) %>%
+  summarize(max_fc = max(abs(log2FoldChange))) 
+
+# filtering on threshold
+control_dox_sig <- control_dox_sig %>%
+  filter(max_fc > 2)
+
+control_dox_sig <- merge(control_dox_sig, g2s)
+
+write_csv(control_dox_sig, "final_dox_results/control_dox_sig.csv")
+```
+
+
+
+# We will use Pval and shrnklfc thresholds 
+
+```{r creating sig genes in combined WT and KO control time course}
+
+# TODO I think this is done above
+# # filtering to sig genes in dox control LRT test "control_shrnklfc"
+# # This means induced in WT and KO firre induced, but not in dox control lines
+# control_dox_sig <- control_shrnklfc %>% 
+#   filter(padj <= pval_thresh)
+
+# Those genes that were in the combined control versus 0 sig genes
+# Those genes that are also in the dox control line
+control_vszero_sig <- control_vszero_shrnklfc %>%
+  filter(gene_id %in% control_dox_sig$gene_id)
+
+# determining max fold change 
+control_vszero_maxfc <- control_vszero_sig %>%
+  group_by(gene_id) %>%
+  summarize(max_fc = max(abs(log2FoldChange))) 
+
+# merging in new col for max fold change with control_vszero_sig
+control_vszero_sig <- control_vszero_sig %>%
+  left_join(control_vszero_maxfc)
+
+# filtering on threshold
+control_vszero_sig <- control_vszero_sig %>%
+  filter(max_fc > l2fc_thresh)
+
+# saving results
+save(control_vszero_sig, file = "final_dox_results/dox_combined_control_vszero_sig.RData")
+```
+
+
+# Plotting 
+
+```{r}
+ # changing lfc col name
+control_vszero_sig <- control_vszero_sig %>%
+  mutate(l2fc_shrunken = log2FoldChange)
+
+# Plotting
+make_timecourse_lfc_plot(deseq_res = control_vszero_sig,
+                         genes_to_include = unique(control_vszero_sig$gene_id),
+                         y_lim = c(-6,6),
+                         draw_plot = FALSE)
+
+ggsave(paste0("final_dox_results/figures/dox_control_lfc_", "01_4fc", ".pdf"),
+       height = 3, width = 3.5, useDingbats = FALSE)
+
+dox_genes_combined_control <-unique(control_vszero_sig$gene_name)
+
+
+
+```
+
+# If want to use LRT here is the shrunken log fold change data:
+ # saving
+ # save(control_dox_shrnklfc,  control_dox_dds, file = "results/control_dox.RData")
+# TODO use LRT?
+
+```{r}
+load("results/control_dox.RData", verbose = T)
+
+# The data above was done with this LRT:
+ # LRT for all 
+  control_dox_dds <- DESeqDataSetFromMatrix(countData = control_dox_counts, 
+                                      colData = control_dox_samples, 
+                                      design = ~firre_ko + timepoint)
+  
+  
+  control_dox_dds <- DESeq(control_dox_dds, test = "LRT", reduced = ~ firre_ko)
+```
+
+
+
