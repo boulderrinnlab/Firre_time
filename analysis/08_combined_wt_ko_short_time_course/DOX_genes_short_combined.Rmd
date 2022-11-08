@@ -385,11 +385,42 @@ t <-unique(ko_dox_short_vszero_sig$gene_name)
              ttimepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
     
+    #TODO
+    # Warning message: In UseMethod("depth") :
+    # no applicable method for 'depth' applied to an object of class "NULL"
+    
+    
+  # Calculate the maximum fold-change in any one timepoint
+  mega_dox_maxfc <- mega_dox_shrnklfc %>%
+    group_by(gene_id) %>%
+    summarize(max_fc = max(abs(log2FoldChange))) 
+  
+  # merge max shrnklfc into dataframe
+  mega_dox_shrnklfc <- mega_dox_shrnklfc %>%
+    left_join(mega_dox_maxfc)
+  
+  #TODO not sure what is going on here
+  # changing lfc col name
+mega_dox_vszero_sig <- short_vszero_sig %>%
+  mutate(l2fc_shrunken = log2FoldChange)
+
+# Plotting
+make_timecourse_lfc_plot(deseq_res = short_vszero_sig,
+                         genes_to_include = unique(ko_dox_short_vszero_sig$gene_id),
+                         y_lim = c(-6,6),
+                         draw_plot = FALSE)
+  
+  
+  
+  # saving
+  save(ko_dox_short_lfc, ko_dox_short_shrnklfc, file = "results/ko_dox_short.RData")
     
     
     
     
     
+    
+
     
     
     
@@ -407,7 +438,7 @@ sig_mega_dox_lfc <- mega_dox_lfc %>%
 
 
 
-ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
+ggsave(paste0("figures/mega_dox_lfc_", thresh, ".pdf"),
        height = 3, width = 3.5, useDingbats = FALSE)
 
 # saving
@@ -442,24 +473,41 @@ ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
                                       design = ~firre_ko + timepoint)
   
   
-  control_dox_dds <- DESeq(mega_dox_dds, test = "LRT", reduced = ~ firre_ko)
+  control_dox_dds <- DESeq(control_dox_dds, test = "LRT", reduced = ~ firre_ko)
 
  
   # Compile results
   res_names <- resultsNames(control_dox_dds)
   
   # grabbing just the Deseq results we want
+  #TODO see result names
   dynamic_res <- res_names[grepl("timepoint", res_names)]
   
   # cleaning up each result file
-  mega_dox_lfc <- lapply(dynamic_res, function(x) {
+  control_dox_lfc <- lapply(dynamic_res, function(x) {
     results(mega_dox_dds, 
             name = x) %>%
       as.data.frame() %>%
       rownames_to_column("gene_id") %>% 
       merge(g2s) %>%
       mutate(result_name = x,
-             timepoint = as.numeric(gsub("firre_inducedfirre_induced.timepoint", "", result_name)))
+             timepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
+  }) %>% bind_rows()
+  
+  
+   #TODO Shrunken LFC
+    ### WARNING RUN TIME LONG ####
+  control_dox_shrnklfc <- lapply(dynamic_res, function(x) {
+    lfcShrink(control_dox_dds, 
+              coef = x,
+              type = "apeglm") %>%
+      as.data.frame() %>%
+      rownames_to_column("gene_id") %>% 
+      merge(g2s) %>%
+      mutate(result_name = x,
+             #TODO why result name
+             #TODO double check result names
+             ttimepoint = as.numeric(gsub("timepoint_|_vs_0", "", result_name)))
   }) %>% bind_rows()
   
   
@@ -473,7 +521,7 @@ ggsave(paste0("figures/dox_short_lfc_", thresh, ".pdf"),
     left_join(ko_dox_short_maxfc)
   
   # saving
-  save(ko_dox_short_lfc, ko_dox_short_shrnklfc, file = "results/ko_dox_short.RData")
+  save(control_dox_shrnklfc,  control_dox_dds, file = "results/control_dox.RData")
 
 
 
